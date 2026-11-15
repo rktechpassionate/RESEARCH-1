@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use Weil Gaussian Lab, please cite this software."
+title: "Weil Gaussian Lab"
+type: software
+authors:
+  - family-names: Kumar
+    given-names: Rajeev
+    affiliation: Quantovibe Research Group
+version: 0.2.0
+repository-code: "https://github.com/rktechpassionate/RESEARCH-1"
+license: MIT
+abstract: >-
+  Reproducible Gaussian test-function calculations, spectral diagnostics,
+  and finite arithmetic experiments under an explicit Fourier convention.

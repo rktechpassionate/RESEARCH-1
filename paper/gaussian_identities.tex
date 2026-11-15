@@ -1,0 +1,286 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{corollary}{Corollary}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\F}{\widehat{f}}
+\newcommand{\PhiA}{\Phi_{a,\sigma}}
+
+\title{Polynomial--Gaussian Test Families and Finite Weil Diagnostics}
+\author{Rajeev Kumar (Quantovibe Research Group)}
+\date{Version 0.2.0, 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We record a two-parameter Gaussian family and its polynomial extensions,
+which enforce prescribed complex Fourier zeros while retaining real-even
+profiles. We derive inverse transforms and autocorrelations, then formulate
+an unconditional $L^2$ Gram matrix and a finite-cutoff Weil-form diagnostic.
+The latter has no certified prime-tail bound. No result about the zeros of
+the Riemann zeta function is asserted here.
+\end{abstract}
+
+\section{Convention and family}
+
+Our Fourier transform and inverse are
+\begin{equation}\label{eq:convention}
+  \widehat{f}(\xi)=\int_{\R} f(x)e^{-i\xi x}\,dx,
+  \qquad
+  f(x)=\frac{1}{2\pi}\int_{\R}\widehat{f}(\xi)e^{i\xi x}\,d\xi.
+\end{equation}
+Fix a center $a\geq 0$ and width $\sigma>0$. Define
+\begin{equation}\label{eq:profile}
+  F_{a,\sigma}(\xi)
+  =\left(\xi^2+\frac14\right)
+    \left(e^{-(\xi-a)^2/(2\sigma^2)}
+         +e^{-(\xi+a)^2/(2\sigma^2)}\right),
+  \qquad \widehat{f_{a,\sigma}}=F_{a,\sigma}.
+\end{equation}
+The right-hand side is entire. Its restriction to $\R$ is real, even, and
+Schwartz, and $F_{a,\sigma}(i/2)=F_{a,\sigma}(-i/2)=0$. Thus its inverse
+transform $f_{a,\sigma}$ is real, even, and Schwartz. The complex zeros
+follow from the factor $\xi^2+1/4$; they do not imply a claim about zeta
+zeros.
+
+\begin{theorem}[Inverse transform]\label{thm:inverse}
+For real $x$,
+\begin{align}\label{eq:inverse}
+f_{a,\sigma}(x)
+={}&\sqrt{\frac{2}{\pi}}\,\sigma e^{-\sigma^2x^2/2}
+\Bigl[
+  \left(a^2+\sigma^2+\frac14-\sigma^4x^2\right)\cos(ax)
+  -2a\sigma^2x\sin(ax)
+\Bigr].
+\end{align}
+\end{theorem}
+
+\begin{proof}
+The inverse transform of $e^{-(\xi-b)^2/(2\sigma^2)}$ under
+\eqref{eq:convention} is
+$\sigma e^{-\sigma^2x^2/2}e^{ibx}/\sqrt{2\pi}$.
+Therefore the inverse transform of the Gaussian pair in
+\eqref{eq:profile} is
+$g(x)=\sqrt{2/\pi}\,\sigma e^{-\sigma^2x^2/2}\cos(ax)$.
+Multiplication by $\xi^2+1/4$ corresponds to applying
+$-\partial_x^2+1/4$ to $g$. Differentiating gives
+\eqref{eq:inverse}.
+\end{proof}
+
+\section{Autocorrelation}
+
+Put $\widetilde f(x)=f(-x)$ and
+\begin{equation}\label{eq:autocorrelation}
+  \PhiA(x)=(f_{a,\sigma}*\widetilde f_{a,\sigma})(x)
+  =\int_{\R}f_{a,\sigma}(t)f_{a,\sigma}(t-x)\,dt.
+\end{equation}
+As $f_{a,\sigma}$ is real and even,
+$\widehat{\PhiA}(\xi)=F_{a,\sigma}(\xi)^2$.
+
+For a compact closed form, define
+\begin{align}\label{eq:polynomial}
+  \lambda_b(x)&=ib-\frac{\sigma^2x}{2},\\
+  P_\sigma(z)&=z^4-\left(3\sigma^2+\frac12\right)z^2
+       +\frac{3\sigma^4}{4}+\frac{\sigma^2}{4}+\frac1{16}.
+\end{align}
+
+\begin{theorem}[Exact autocorrelation]\label{thm:auto}
+For every real $x$,
+\begin{equation}\label{eq:closed}
+  \PhiA(x)=\frac{\sigma}{\sqrt\pi}e^{-\sigma^2x^2/4}
+  \left[
+    \operatorname{Re}\!\left(e^{iax}P_\sigma(\lambda_a(x))\right)
+    +e^{-a^2/\sigma^2}P_\sigma(\lambda_0(x))
+  \right].
+\end{equation}
+Equivalently, if
+\begin{equation}\label{eq:base}
+  H(x)=\frac{\sigma}{\sqrt\pi}e^{-\sigma^2x^2/4}
+             \left[\cos(ax)+e^{-a^2/\sigma^2}\right],
+\end{equation}
+then $\PhiA=(-\partial_x^2+1/4)^2H$.
+\end{theorem}
+
+\begin{proof}
+Squaring the two Gaussian terms in \eqref{eq:profile} gives
+\begin{align*}
+\left(e^{-(\xi-a)^2/(2\sigma^2)}
+     +e^{-(\xi+a)^2/(2\sigma^2)}\right)^2
+={}&e^{-(\xi-a)^2/\sigma^2}
+    +e^{-(\xi+a)^2/\sigma^2}
+    +2e^{-a^2/\sigma^2}e^{-\xi^2/\sigma^2}.
+\end{align*}
+The inverse transform of this sum is $H$ in \eqref{eq:base}.
+The remaining factor $(\xi^2+1/4)^2$ proves the differential form.
+
+To evaluate it, let
+$q_b(x)=e^{-\sigma^2x^2/4+ibx}$. Then
+$q_b''=(\lambda_b^2-\sigma^2/2)q_b$ and
+$q_b^{(4)}=(\lambda_b^4-3\sigma^2\lambda_b^2
+                  +3\sigma^4/4)q_b$.
+Since $(-\partial_x^2+1/4)^2
+=\partial_x^4-\tfrac12\partial_x^2+\tfrac1{16}$,
+its action on $q_b$ is $P_\sigma(\lambda_b)q_b$.
+Pairing the conjugate terms $b=a$ and $b=-a$ yields
+\eqref{eq:closed}.
+\end{proof}
+
+\begin{corollary}[Normalization checks]\label{cor:checks}
+The total autocorrelation mass and its value at the origin are
+\begin{align}\label{eq:mass}
+  \int_{\R}\PhiA(x)\,dx
+  &=F_{a,\sigma}(0)^2
+   =\frac14 e^{-a^2/\sigma^2},\\
+  \PhiA(0)
+  &=\|f_{a,\sigma}\|_{L^2(\R)}^2\notag\\
+  &=\frac{\sigma}{\sqrt\pi}
+    \left[
+      a^4+\left(3\sigma^2+\frac12\right)a^2
+      +C_\sigma\left(1+e^{-a^2/\sigma^2}\right)
+    \right],\label{eq:at-zero}
+\end{align}
+where $C_\sigma=3\sigma^4/4+\sigma^2/4+1/16$.
+Moreover $|\PhiA(x)|\leq\PhiA(0)$ for all real $x$.
+\end{corollary}
+
+\begin{proof}
+The first identity is the Fourier transform of \eqref{eq:autocorrelation}
+at zero. The second follows from \eqref{eq:autocorrelation} at zero
+and \eqref{eq:closed}; it also follows by Plancherel from
+$(2\pi)^{-1}\int_{\R}F_{a,\sigma}(\xi)^2\,d\xi$.
+The final bound is Cauchy--Schwarz applied to the two translated copies
+of $f_{a,\sigma}$ in \eqref{eq:autocorrelation}.
+\end{proof}
+
+\section{Polynomial--Gaussian families}
+
+Let $P(y)=\sum_{m=0}^{M}c_m y^m$ be a polynomial with real
+coefficients. Replacing the factor $\xi^2+1/4$ in
+\eqref{eq:profile} by $P(\xi^2)$ defines
+\begin{equation}\label{eq:poly-family}
+ F_{P,a,\sigma}(\xi)=P(\xi^2)
+ \left(e^{-(\xi-a)^2/(2\sigma^2)}
+       +e^{-(\xi+a)^2/(2\sigma^2)}\right).
+\end{equation}
+For a requested complex zero $z$, a real factor can be formed as
+$Q_z(y)=y-z^2$ when $z^2$ is real, and otherwise as
+$Q_z(y)=(y-z^2)(y-\overline z^{\,2})$.
+Products of such factors impose the zero orbit
+$\{\pm z,\pm\overline z\}$ as needed while keeping
+$F_{P,a,\sigma}$ real and even on the real axis. Repeated generators
+give repeated factors. The zero orbit containing $\pm i/2$ must be present
+when the admissibility condition $F_{P,a,\sigma}(\pm i/2)=0$ is required
+for the Weil formulas below.
+
+\begin{theorem}[Polynomial inverse and autocorrelation]\label{thm:poly}
+Let $g(x)=\sqrt{2/\pi}\,\sigma e^{-\sigma^2x^2/2}\cos(ax)$ and let
+$H$ be defined by \eqref{eq:base}. Then
+\begin{align}\label{eq:poly-operators}
+ f_{P,a,\sigma}&=P(-\partial_x^2)g,\\
+ \Phi_{P,a,\sigma}&=P(-\partial_x^2)^2H.\notag
+\end{align}
+Both functions are real, even, and Schwartz.
+\end{theorem}
+
+\begin{proof}
+Multiplication by $\xi^{2m}$ under \eqref{eq:convention}
+corresponds to $(-\partial_x^2)^m$. Apply this term by term to
+the Gaussian pair and then to its squared Fourier profile.
+Real coefficients and even powers preserve reality and evenness.
+\end{proof}
+
+The implementation evaluates the derivatives in
+\eqref{eq:poly-operators} with the probabilists' Hermite polynomials
+$\mathrm{He}_n(t)=(-1)^n e^{t^2/2}
+(\mathrm{d}/\mathrm{d}t)^n e^{-t^2/2}$.
+In particular, if $P(y)=\sum_m c_m y^m$, then
+\begin{equation}\label{eq:hermite-inverse}
+ f_{P,a,\sigma}(x)=\sqrt{\frac2\pi}\,\sigma e^{-\sigma^2x^2/2}
+ \operatorname{Re}\!\left[
+ e^{iax}\sum_{m=0}^{M}c_m(-1)^m\sigma^{2m}
+ \mathrm{He}_{2m}\!\left(\sigma x-\frac{ia}{\sigma}\right)
+ \right].
+\end{equation}
+For autocorrelation, expand $P(y)^2=\sum_m d_m y^m$ and apply
+the same identity to the three Gaussian terms in the proof of
+Theorem~\ref{thm:auto}, with Gaussian scale $\sigma/\sqrt2$.
+These expressions make arbitrary finite zero sets computable
+without numerical differentiation.
+
+\section{Gram matrices and finite Weil diagnostics}
+
+Consider a finite collection of real-even families
+$f_1,\ldots,f_r$ with Fourier profiles $F_1,\ldots,F_r$.
+Their cross-correlations are
+\begin{equation}\label{eq:cross}
+ \Phi_{ij}(x)=\int_{\R}f_i(t)f_j(t-x)\,dt
+ =\frac1{2\pi}\int_{\R}F_i(\xi)F_j(\xi)e^{i\xi x}\,d\xi.
+\end{equation}
+At zero lag the $L^2$ Gram matrix is
+\begin{equation}\label{eq:l2gram}
+ G_{ij}=\Phi_{ij}(0)
+ =\frac1{2\pi}\int_{\R}F_i(\xi)F_j(\xi)\,d\xi.
+\end{equation}
+\begin{theorem}[Unconditional Gram positivity]\label{thm:gram}
+The real symmetric matrix $G$ in \eqref{eq:l2gram} is positive
+semidefinite. It is positive definite if and only if the functions
+$f_1,\ldots,f_r$ are linearly independent in $L^2(\R)$.
+\end{theorem}
+\begin{proof}
+For any real vector $v$,
+$v^\mathsf{T}Gv=\int_{\R}(\sum_i v_i f_i(x))^2\,dx\geq0$.
+Equality holds precisely for a linear dependence.
+\end{proof}
+Eigenvalues and condition numbers of $G$ therefore diagnose
+linear dependence and numerical conditioning. This positivity
+is an ordinary $L^2$ fact; it is not a test of the Riemann Hypothesis.
+
+For an additional exploratory diagnostic, assume each
+$F_i(\pm i/2)=0$. Let $\psi=\Gamma'/\Gamma$,
+let $\Lambda$ be the von Mangoldt function, and choose a finite
+integer cutoff $N\geq2$. Define
+\begin{align}\label{eq:finite-weil}
+ K_{ij}
+ &=\frac1\pi\int_0^\infty
+   \operatorname{Re}\psi\!\left(\frac14+\frac{i\xi}{2}\right)
+   F_i(\xi)F_j(\xi)\,d\xi-G_{ij}\log\pi,\\
+ B^{(N)}_{ij}
+ &=2\sum_{2\leq n\leq N}
+   \frac{\Lambda(n)}{\sqrt n}\Phi_{ij}(\log n),
+ \qquad W^{(N)}=K-B^{(N)}.\notag
+\end{align}
+The factor $2$ is the standard prime-side coefficient for
+\eqref{eq:convention}; see \cite{conrey}. The software reports
+numerical eigenvalues of $W^{(N)}$ as a \emph{finite-cutoff diagnostic}.
+It supplies no bound on the omitted prime tail. Consequently,
+neither the sign of $W^{(N)}$ nor that of a single numerical
+quadratic-form value certifies the sign of the complete Weil form.
+
+\section{Scope and reproducibility}
+
+Equations \eqref{eq:inverse}, \eqref{eq:closed}, \eqref{eq:mass}, and
+\eqref{eq:at-zero} are the formulas implemented by the accompanying
+software. Numerical comparisons against independently integrated Fourier
+inversion provide regression checks, not a substitute for the proofs above.
+The polynomial formulas and $L^2$ Gram result above are algebraic and
+unconditional. Finite Weil calculations use numerical quadrature and a
+truncated prime-power sum, with no certified total error bound. The note
+asserts no theorem conditional or unconditional on RH.
+
+\begin{thebibliography}{9}
+\bibitem{stein-shakarchi}
+E. M. Stein and R. Shakarchi, \emph{Fourier Analysis: An Introduction},
+Princeton University Press, 2003.
+\bibitem{conrey}
+J. B. Conrey, \emph{The Riemann Hypothesis},
+Notices of the American Mathematical Society 50 (2003), 341--353.
+\end{thebibliography}
+
+\end{document}

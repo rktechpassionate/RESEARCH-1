@@ -1,0 +1,50 @@
+name: Software bug or numerical instability
+description: Report a reproducible API, CLI, packaging, or precision problem.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a security vulnerability, use the private reporting route in
+        SECURITY.md rather than posting exploit details here.
+  - type: input
+    id: component
+    attributes:
+      label: Affected command or function
+      placeholder: "weil-gaussian verify, l2_gram_diagnostics, ..."
+    validations:
+      required: true
+  - type: textarea
+    id: reproducer
+    attributes:
+      label: Minimal reproduction
+      description: Include the exact command or short Python script and all input parameters.
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Expected and observed behavior
+      description: Include tracebacks, output, and any independent reference result.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: "Version 0.2.0, Python 3.12, NumPy version, operating system"
+    validations:
+      required: true
+  - type: textarea
+    id: precision
+    attributes:
+      label: Numerical details, if relevant
+      description: State precision, tolerances, condition number, integration method, and estimated error.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks performed, where applicable
+      options:
+        - label: I checked the Fourier sign, inverse factor, and constant terms.
+        - label: I checked edge cases such as zero center, repeated zeros, and invalid inputs.
+        - label: I labeled finite prime sums and did not treat them as certified full values.

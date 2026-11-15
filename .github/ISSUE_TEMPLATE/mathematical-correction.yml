@@ -1,0 +1,48 @@
+name: Mathematical correction or counterexample
+description: Report a formula, normalization, or numerical claim that needs review.
+title: "[Math] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping check the mathematics. Please give an independent
+        derivation or reproducible calculation. Do not submit a numerical
+        observation as a general proof.
+  - type: input
+    id: location
+    attributes:
+      label: Affected equation, theorem, or function
+      placeholder: "paper equation (7), families.autocorrelation, ..."
+    validations:
+      required: true
+  - type: textarea
+    id: claim
+    attributes:
+      label: Expected statement and observed discrepancy
+      description: Quote the exact claim and explain the proposed correction.
+    validations:
+      required: true
+  - type: textarea
+    id: convention
+    attributes:
+      label: Fourier convention and parameter values
+      description: State signs, inverse normalization, zeros, center, width, and cutoff if relevant.
+      placeholder: "f-hat(xi)=int f(x)exp(-i xi x) dx; inverse 1/(2 pi); a=..."
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Independent derivation or reproducer
+      description: Include symbolic steps or code, quadrature subdivisions, precision, tolerances, and error estimate.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks performed, where applicable
+      options:
+        - label: I checked Fourier sign and 2 pi normalization.
+        - label: I checked conjugate symmetry and zero multiplicity.
+        - label: I checked constants, prime-power factor 2, and finite cutoff.
+        - label: I distinguished an L2 Gram result from a finite Weil diagnostic.
