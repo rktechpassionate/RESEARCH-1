@@ -6,9 +6,10 @@ authors:
   - family-names: Kumar
     given-names: Rajeev
     affiliation: Quantovibe Research Group
-version: 0.2.0
+version: 1.0.0
 repository-code: "https://github.com/rktechpassionate/RESEARCH-1"
 license: MIT
 abstract: >-
-  Reproducible Gaussian test-function calculations, spectral diagnostics,
-  and finite arithmetic experiments under an explicit Fourier convention.
+  Reproducible polynomial-Gaussian Fourier identities, high-precision reference
+  vectors, numerical quadrature cross-checks, L2 Gram diagnostics, and finite
+  arithmetic experiments under an explicit Fourier convention.

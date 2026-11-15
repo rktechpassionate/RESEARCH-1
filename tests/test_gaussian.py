@@ -23,8 +23,8 @@ from weil_gaussian import (
 
 def _reference_fourier(frequency: mp.mpf, center: mp.mpf, width: mp.mpf) -> mp.mpf:
     return (frequency**2 + mp.mpf("0.25")) * (
-        mp.exp(-((frequency - center) / width) ** 2 / 2)
-        + mp.exp(-((frequency + center) / width) ** 2 / 2)
+        mp.exp(-(((frequency - center) / width) ** 2) / 2)
+        + mp.exp(-(((frequency + center) / width) ** 2) / 2)
     )
 
 
@@ -117,7 +117,10 @@ def test_vector_inputs_match_scalar_evaluations():
         )
 
 
-@pytest.mark.parametrize("center,width", [(-0.1, 1.0), (0.0, 0.0), (0.0, -1.0), (math.nan, 1.0), (0.0, math.inf)])
+@pytest.mark.parametrize(
+    "center,width",
+    [(-0.1, 1.0), (0.0, 0.0), (0.0, -1.0), (math.nan, 1.0), (0.0, math.inf)],
+)
 def test_invalid_parameters_are_rejected(center, width):
     for function in (fourier_profile, inverse_profile, autocorrelation):
         with pytest.raises(ValueError):

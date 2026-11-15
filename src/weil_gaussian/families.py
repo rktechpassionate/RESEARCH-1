@@ -7,14 +7,23 @@ All numeric evaluations use NumPy double precision.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import math
-from typing import Any
+from dataclasses import dataclass, field
+from typing import cast, overload
 
 import numpy as np
+import numpy.typing as npt
 from numpy.polynomial.hermite_e import hermeval
 
-from .core import _parameters, _real_input, _scalar_or_array
+from .core import (
+    ComplexArray,
+    FourierResult,
+    RealArray,
+    RealResult,
+    _parameters,
+    _real_input,
+    _scalar_or_array,
+)
 
 
 def _zero_generators(values: tuple[complex, ...]) -> tuple[complex, ...]:
@@ -48,7 +57,7 @@ def _polynomial_coefficients(zeros: tuple[complex, ...]) -> tuple[float, ...]:
 
 def _even_hermite_coefficients(
     coefficients: tuple[float, ...], scale: float
-) -> np.ndarray:
+) -> RealArray:
     """Encode sum c_m (-1)^m scale^(2m) He_(2m) for hermeval."""
     weights = np.zeros(2 * len(coefficients) - 1, dtype=np.float64)
     for degree, coefficient in enumerate(coefficients):
@@ -97,11 +106,27 @@ class PolynomialGaussianFamily:
         """
         return any(z.real == 0.0 and abs(z.imag) == 0.5 for z in self.zeros)
 
-    def fourier(self, frequency: Any) -> Any:
-        """Evaluate the entire Fourier profile at real or complex frequencies."""
+    @overload
+    def fourier(self, frequency: float) -> float: ...
+
+    @overload
+    def fourier(self, frequency: complex) -> complex: ...
+
+    @overload
+    def fourier(self, frequency: npt.ArrayLike) -> FourierResult: ...
+
+    def fourier(self, frequency: npt.ArrayLike) -> FourierResult:
+        """Evaluate at real or complex frequencies using double precision.
+
+        Relative error can grow near roots or when polynomial factors are
+        poorly scaled. Exact supplied roots are returned as exact zeros.
+        """
         raw = np.asarray(frequency)
-        data = np.asarray(
-            raw, dtype=np.complex128 if np.iscomplexobj(raw) else np.float64
+        data = cast(
+            RealArray | ComplexArray,
+            np.asarray(
+                raw, dtype=np.complex128 if np.iscomplexobj(raw) else np.float64
+            ),
         )
         if not np.all(np.isfinite(data)):
             raise ValueError("frequency must contain only finite values")
@@ -127,23 +152,27 @@ class PolynomialGaussianFamily:
                 polynomial = polynomial * (square - root) * (square - root.conjugate())
             else:
                 # On the real line the conjugate pair is a real sum of squares.
-                polynomial = polynomial * (
-                    (square - root.real) ** 2 + root.imag**2
-                )
+                polynomial = polynomial * ((square - root.real) ** 2 + root.imag**2)
         centered = (safe_data - self.center) / self.width
         reflected = (safe_data + self.center) / self.width
         result = polynomial * (
-            np.exp(-0.5 * centered * centered)
-            + np.exp(-0.5 * reflected * reflected)
+            np.exp(-0.5 * centered * centered) + np.exp(-0.5 * reflected * reflected)
         )
         result = np.where(root_mask, 0, result)
         return _scalar_or_array(result, data)
 
-    def inverse(self, position: Any) -> Any:
+    @overload
+    def inverse(self, position: float) -> float: ...
+
+    @overload
+    def inverse(self, position: npt.ArrayLike) -> RealResult: ...
+
+    def inverse(self, position: npt.ArrayLike) -> RealResult:
         r"""Evaluate the real inverse Fourier transform of fourier.
 
         The convention is f(x) = (2*pi)^(-1) integral F(xi) exp(i*xi*x) dxi.
         Even Hermite polynomials evaluate derivatives for powers of xi.
+        Large degrees and cancellation points can lose relative accuracy.
         """
         x = _real_input(position, "position")
         scale = self.width
@@ -156,18 +185,28 @@ class PolynomialGaussianFamily:
             * np.exp(-0.5 * (scale * x) ** 2)
             * np.real(np.exp(1j * self.center * x) * polynomial)
         )
-        return _scalar_or_array(result, x)
+        return cast(RealResult, _scalar_or_array(result, x))
 
-    def autocorrelation(self, position: Any) -> Any:
+    @overload
+    def autocorrelation(self, position: float) -> float: ...
+
+    @overload
+    def autocorrelation(self, position: npt.ArrayLike) -> RealResult: ...
+
+    def autocorrelation(self, position: npt.ArrayLike) -> RealResult:
         r"""Evaluate Phi(x)=integral f(t) f(t-x) dt in closed form.
 
         On the real frequency line F is real and even, so the Fourier
         transform of Phi is F**2. The three Gaussian terms in that square
-        are inverted using even Hermite derivatives.
+        are inverted using even Hermite derivatives. These floating-point
+        evaluations are not certified error enclosures.
         """
         x = _real_input(position, "position")
         scale = self.width / math.sqrt(2.0)
-        squared_coefficients = tuple(np.convolve(self.coefficients, self.coefficients))
+        squared_coefficients = tuple(
+            float(coefficient)
+            for coefficient in np.convolve(self.coefficients, self.coefficients)
+        )
         weights = _even_hermite_coefficients(squared_coefficients, scale)
         argument = scale * x - 1j * self.center / scale
         centered_term = np.real(
@@ -183,4 +222,4 @@ class PolynomialGaussianFamily:
                 + math.exp(-((self.center / self.width) ** 2)) * cross_term
             )
         )
-        return _scalar_or_array(result, x)
+        return cast(RealResult, _scalar_or_array(result, x))

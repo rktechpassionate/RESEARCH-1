@@ -1,7 +1,7 @@
 """Independent checks of general polynomial-Gaussian families."""
 
-from dataclasses import FrozenInstanceError
 import math
+from dataclasses import FrozenInstanceError
 
 import mpmath as mp
 import numpy as np
@@ -23,8 +23,8 @@ def _reference_spectrum(t, center, width, zeros):
         else:
             polynomial *= (y - root) * (y - mp.conj(root))
     return polynomial * (
-        mp.exp(-((t - center) / width) ** 2 / 2)
-        + mp.exp(-((t + center) / width) ** 2 / 2)
+        mp.exp(-(((t - center) / width) ** 2) / 2)
+        + mp.exp(-(((t + center) / width) ** 2) / 2)
     )
 
 
@@ -116,8 +116,10 @@ def test_default_family_matches_original_functions(center, width):
         family.inverse(grid), inverse_profile(grid, center, width)
     )
     np.testing.assert_allclose(
-        family.autocorrelation(grid), autocorrelation(grid, center, width),
-        rtol=2e-13, atol=2e-13,
+        family.autocorrelation(grid),
+        autocorrelation(grid, center, width),
+        rtol=2e-13,
+        atol=2e-13,
     )
 
 
@@ -132,7 +134,9 @@ def test_zero_free_family_has_elementary_gaussian_forms(center, width, position)
         math.sqrt(2 / math.pi) * s * math.exp(-s * s * x * x / 2) * math.cos(a * x)
     )
     expected_correlation = (
-        s / math.sqrt(math.pi) * math.exp(-s * s * x * x / 4)
+        s
+        / math.sqrt(math.pi)
+        * math.exp(-s * s * x * x / 4)
         * (math.cos(a * x) + math.exp(-a * a / (s * s)))
     )
     assert family.inverse(x) == pytest.approx(expected_inverse, rel=1e-13)
@@ -211,9 +215,7 @@ def test_complex_fourier_evenness_and_conjugation():
 def test_autocorrelation_mass_matches_zero_frequency_square():
     family = PolynomialGaussianFamily(1.0, 1.0, (0.5j, 1.5j))
     with mp.workdps(25):
-        observed = mp.quad(
-            lambda x: family.autocorrelation(float(x)), [-20, 0, 20]
-        )
+        observed = mp.quad(lambda x: family.autocorrelation(float(x)), [-20, 0, 20])
     assert float(observed) == pytest.approx(family.fourier(0.0) ** 2, rel=2e-10)
 
 

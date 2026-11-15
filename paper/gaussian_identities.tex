@@ -14,7 +14,7 @@
 
 \title{Polynomial--Gaussian Test Families and Finite Weil Diagnostics}
 \author{Rajeev Kumar (Quantovibe Research Group)}
-\date{Version 0.2.0, 2026}
+\date{Version 1.0.0, 2026}
 
 \begin{document}
 \maketitle
@@ -24,8 +24,10 @@ We record a two-parameter Gaussian family and its polynomial extensions,
 which enforce prescribed complex Fourier zeros while retaining real-even
 profiles. We derive inverse transforms and autocorrelations, then formulate
 an unconditional $L^2$ Gram matrix and a finite-cutoff Weil-form diagnostic.
-The latter has no certified prime-tail bound. No result about the zeros of
-the Riemann zeta function is asserted here.
+Reproducible high-precision reference values and two numerical quadrature
+schemes check selected formulas. The finite diagnostic has no certified
+prime-tail bound. No result about the zeros of the Riemann zeta function is
+asserted here.
 \end{abstract}
 
 \section{Convention and family}
@@ -242,6 +244,27 @@ Eigenvalues and condition numbers of $G$ therefore diagnose
 linear dependence and numerical conditioning. This positivity
 is an ordinary $L^2$ fact; it is not a test of the Riemann Hypothesis.
 
+For a computed $r\times r$ symmetric Gram matrix, the software reports
+its ordered eigenvalues, effective rank at a stated relative tolerance,
+and $\lambda_{\max}/\lambda_{\min}$ when the smallest eigenvalue exceeds
+that tolerance times the spectral scale. Otherwise the reported
+condition number is infinite. Relative eigenvalues and cumulative
+positive-part eigenvalue sums describe spectral decay. If two computed
+matrices differ by $E$, Weyl's inequality gives
+\begin{equation}\label{eq:weyl}
+ |\lambda_j(G+E)-\lambda_j(G)|\leq\lVert E\rVert_2.
+\end{equation}
+When $\lambda_{\min}(G)>\lVert E\rVert_2$, a resulting condition-number
+upper bound is
+\begin{equation}\label{eq:condition-bound}
+ \kappa_2(G+E)\leq
+ \frac{\lambda_{\max}(G)+\lVert E\rVert_2}
+      {\lambda_{\min}(G)-\lVert E\rVert_2}.
+\end{equation}
+These bounds apply to the computed matrices. Without an enclosure for
+entrywise evaluation errors, they are not certified bounds on the exact
+Gram matrix for a mathematical parameter family.
+
 For an additional exploratory diagnostic, assume each
 $F_i(\pm i/2)=0$. Let $\psi=\Gamma'/\Gamma$,
 let $\Lambda$ be the von Mangoldt function, and choose a finite
@@ -263,7 +286,76 @@ It supplies no bound on the omitted prime tail. Consequently,
 neither the sign of $W^{(N)}$ nor that of a single numerical
 quadratic-form value certifies the sign of the complete Weil form.
 
-\section{Scope and reproducibility}
+\section{Numerical cross-checks and reproducibility}
+
+For selected real positions $x$, the verifier evaluates the defining
+Fourier integrals
+\begin{equation}\label{eq:check-integrals}
+ f_{P,a,\sigma}(x)
+ =\frac1\pi\int_0^\infty F_{P,a,\sigma}(\xi)\cos(\xi x)\,d\xi,
+ \qquad
+ \Phi_{P,a,\sigma}(x)
+ =\frac1\pi\int_0^\infty F_{P,a,\sigma}(\xi)^2
+   \cos(\xi x)\,d\xi.
+\end{equation}
+One route uses adaptive Gauss--Kronrod integration with intervals split
+around Gaussian peaks. The other uses Gauss--Hermite quadrature after
+completing the square in each Gaussian term, with an order-doubling
+comparison. Both compare with the analytic Hermite formulas. The reported
+absolute residuals, adaptive error estimates, quadrature-order changes,
+and cross-scheme differences are numerical indicators, not rigorous
+enclosures for the integrals.
+
+The committed reference file
+\texttt{tests/data/golden\_vectors.json} stores fixed test families and
+high-precision decimal values from direct spectrum evaluation and
+\texttt{mpmath} integration of the defining Fourier integrals,
+with explicit tolerances for double-precision comparisons. The
+\texttt{weil-gaussian reproduce} command regenerates these values and a
+structured JSON/Markdown report. Its \texttt{--check} option detects
+regression against the committed vectors. The numerical table below
+uses the same fixed cases in a representative run; observed float64 error
+digits may vary slightly across platforms. The float64 comparison threshold
+is $5\times10^{-12}+5\times10^{-12}|\text{reference}|$, while committed
+decimal references are checked at $10^{-48}$ absolute plus relative
+tolerance. Decimal agreement for these cases should not
+be extrapolated to arbitrary widths, centers, or polynomial degrees.
+The calculation uses 70 working decimal digits and no random sampling,
+so no random seed enters the reported data.
+
+\clearpage
+\begin{table}[htbp]
+\centering
+\footnotesize
+\begin{tabular}{lrrrrrr}
+\hline
+Case & $a$ & $\sigma$ & $x$ & $f(x)$ & $\Phi(x)$ & Max.\ abs.\ error\\
+\hline
+\texttt{base\_origin}          & 1.2 & 0.9 & 0   &  1.795240262 &   3.64469161  & $3.064\times10^{-16}$\\
+\texttt{base\_offset}          & 1.2 & 0.9 & 0.8 & -0.04490139209 & -0.06085600649 & $3.827\times10^{-16}$\\
+\texttt{two\_imaginary\_zeros} & 0.7 & 1.1 & 0.8 & -2.906565367 & -29.2549345   & $3.282\times10^{-15}$\\
+\texttt{complex\_zero\_orbit}  & 1.0 & 0.8 & 0.4 &  9.318736459 & 265.1303927   & $1.787\times10^{-13}$\\
+\hline
+\end{tabular}
+\caption{Values and representative observed maximum absolute errors from
+\texttt{weil-gaussian reproduce}, rounded as in its Markdown report.
+The error maximum covers the Fourier profile at the frequency recorded
+in the golden-vector fixture, inverse transform, autocorrelation,
+and total mass for each case, compared to the
+high-precision reference. The two multi-zero cases include the
+$i/2$ generator and, respectively, $i$ or $0.7+0.3i$.}
+\label{tab:golden}
+\end{table}
+
+The same report gives a smallest eigenvalue of $0.3224654265$ and
+condition number $1883.346262$ for the $3\times3$ $L^2$ Gram formed
+from the first, third, and fourth rows of Table~\ref{tab:golden}. Its
+maximum observed matrix-entry absolute error is
+$1.291\times10^{-12}$ relative to the high-precision reference.
+These are case-specific double-precision results, not
+interval-certified enclosures for arbitrary Grams.
+
+\section{Scope}
 
 Equations \eqref{eq:inverse}, \eqref{eq:closed}, \eqref{eq:mass}, and
 \eqref{eq:at-zero} are the formulas implemented by the accompanying

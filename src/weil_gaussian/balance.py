@@ -7,9 +7,9 @@ certificate, or a test of the Riemann Hypothesis.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
 import warnings
+from dataclasses import dataclass
 
 from scipy.integrate import IntegrationWarning, quad
 from scipy.special import digamma
@@ -65,7 +65,7 @@ def _tolerance(value: float, name: str) -> float:
     return number
 
 
-def _real_scalar(value: object, description: str) -> float:
+def _real_scalar(value: float | complex, description: str) -> float:
     converted = complex(value)
     if not math.isfinite(converted.real) or not math.isfinite(converted.imag):
         raise FloatingPointError(f"{description} is not finite")
@@ -88,7 +88,7 @@ def _integration_intervals(
             points.append(point)
     if len(points) == 1:
         raise ValueError("parameter scale exceeds supported float integration range")
-    return tuple(zip(points, (*points[1:], math.inf)))
+    return tuple(zip(points, (*points[1:], math.inf), strict=True))
 
 
 def archimedean_component(
@@ -104,6 +104,8 @@ def archimedean_component(
 
     This normalization requires F(+/-i/2)=0. The returned quadrature error
     is an adaptive estimate, not a mathematically certified enclosure.
+    For large polynomial degrees, roundoff in the Fourier profile can exceed
+    this quadrature estimate; the two errors must not be conflated.
     """
     family = _family(family)
     _admissible(family)
@@ -150,9 +152,7 @@ def archimedean_component(
     )
 
 
-def finite_prime_component(
-    family: PolynomialGaussianFamily, cutoff: int
-) -> float:
+def finite_prime_component(family: PolynomialGaussianFamily, cutoff: int) -> float:
     r"""Return the finite prime-power term through the integer cutoff.
 
     The value is 2 sum_{n<=cutoff} Lambda(n) Phi(log n) / sqrt(n).

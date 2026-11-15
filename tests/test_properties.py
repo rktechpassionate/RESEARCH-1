@@ -6,9 +6,10 @@ reproducible search over moderate, numerically well-conditioned parameters.
 
 import math
 
-from hypothesis import given, settings, strategies as st
 import numpy as np
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from weil_gaussian import (
     PolynomialGaussianFamily,
@@ -18,10 +19,11 @@ from weil_gaussian import (
     l2_gram_diagnostics,
 )
 
-
 centers = st.floats(min_value=0.0, max_value=4.0, allow_nan=False, allow_infinity=False)
 widths = st.floats(min_value=0.4, max_value=2.0, allow_nan=False, allow_infinity=False)
-positions = st.floats(min_value=-3.0, max_value=3.0, allow_nan=False, allow_infinity=False)
+positions = st.floats(
+    min_value=-3.0, max_value=3.0, allow_nan=False, allow_infinity=False
+)
 
 
 @settings(max_examples=40, deadline=None)

@@ -10,8 +10,8 @@ import numpy as np
 import pytest
 from scipy.integrate import IntegrationWarning
 
-from weil_gaussian.families import PolynomialGaussianFamily
 from weil_gaussian.balance import balance_diagnostic
+from weil_gaussian.families import PolynomialGaussianFamily
 from weil_gaussian.gram import (
     cross_autocorrelation,
     finite_weil_diagnostics,
@@ -19,6 +19,7 @@ from weil_gaussian.gram import (
     grid_gram_diagnostics,
     l2_gram_diagnostics,
     l2_gram_matrix,
+    l2_gram_sensitivity,
 )
 
 
@@ -35,8 +36,8 @@ def _mp_fourier(family: PolynomialGaussianFamily, frequency: mp.mpf) -> mp.mpf:
                 frequency * frequency - mp.conj(square)
             )
     a, s = mp.mpf(str(family.center)), mp.mpf(str(family.width))
-    gaussian = mp.exp(-((frequency - a) / s) ** 2 / 2) + mp.exp(
-        -((frequency + a) / s) ** 2 / 2
+    gaussian = mp.exp(-(((frequency - a) / s) ** 2) / 2) + mp.exp(
+        -(((frequency + a) / s) ** 2) / 2
     )
     return mp.re(polynomial * gaussian)
 
@@ -46,12 +47,13 @@ def _mp_cross(left, right, position):
     points = sorted(
         {mp.mpf("0"), mp.mpf(str(left.center)), mp.mpf(str(right.center))}
     ) + [mp.inf]
-    return mp.quad(
-        lambda t: _mp_fourier(left, t)
-        * _mp_fourier(right, t)
-        * mp.cos(t * x),
-        points,
-    ) / mp.pi
+    return (
+        mp.quad(
+            lambda t: _mp_fourier(left, t) * _mp_fourier(right, t) * mp.cos(t * x),
+            points,
+        )
+        / mp.pi
+    )
 
 
 @pytest.mark.parametrize(
@@ -133,7 +135,10 @@ def test_gram_diagonal_matches_independent_parseval_integral():
 def test_grid_order_and_diagnostics():
     result = grid_gram_diagnostics([0.0, 1.0], [0.7, 1.2], zeros=(0.5j,))
     assert [(f.center, f.width) for f in result.families] == [
-        (0.0, 0.7), (0.0, 1.2), (1.0, 0.7), (1.0, 1.2)
+        (0.0, 0.7),
+        (0.0, 1.2),
+        (1.0, 0.7),
+        (1.0, 1.2),
     ]
     assert result.matrix.shape == (4, 4)
     assert result.eigenvalues.shape == (4,)
@@ -166,6 +171,222 @@ def test_tiny_full_rank_gram_uses_relative_spectral_scale():
     assert result.effective_rank == 1
     assert result.condition_number == pytest.approx(1.0)
     assert result.is_positive_semidefinite
+
+
+@pytest.mark.parametrize(
+    "centers,widths,zeros",
+    [
+        ([0.0], [1.0], ()),
+        ([0.2, 1.1], [0.7], (0.5j,)),
+        ([0.1, 1.4, 2.2], [0.8], (0.5j, 0.7j)),
+        ([0.3, 1.3], [0.9, 1.2], (0.5j, 0.3 + 0.4j)),
+    ],
+)
+def test_spectral_decay_matches_independent_eigenspectrum(centers, widths, zeros):
+    result = grid_gram_diagnostics(centers, widths, zeros)
+    eigenvalues = np.linalg.eigvalsh(result.matrix)[::-1]
+    nonnegative = np.maximum(eigenvalues, 0.0)
+    np.testing.assert_allclose(
+        result.relative_spectrum,
+        nonnegative / nonnegative[0],
+        rtol=1e-13,
+        atol=1e-13,
+    )
+    np.testing.assert_allclose(
+        result.cumulative_spectral_energy,
+        np.cumsum(nonnegative) / np.sum(nonnegative),
+        rtol=1e-13,
+        atol=1e-13,
+    )
+    assert result.cumulative_spectral_energy[-1] == pytest.approx(1.0)
+    assert np.all(np.diff(result.relative_spectrum) <= 1e-14)
+    assert np.all(np.diff(result.cumulative_spectral_energy) >= -1e-14)
+
+
+def test_spectral_decay_reports_rank_one_duplicate_family():
+    family = PolynomialGaussianFamily(0.6, 0.9, (0.5j, 0.7j))
+    result = l2_gram_diagnostics((family, family, family))
+    np.testing.assert_allclose(result.relative_spectrum, [1.0, 0.0, 0.0], atol=1e-14)
+    np.testing.assert_allclose(result.cumulative_spectral_energy, [1.0, 1.0, 1.0])
+    assert not result.relative_spectrum.flags.writeable
+    assert not result.cumulative_spectral_energy.flags.writeable
+
+
+def test_spectral_decay_uses_positive_part_for_roundoff_eigenvalue(monkeypatch):
+    matrix = np.array([[1.0, 0.0], [0.0, -1e-15]])
+    monkeypatch.setattr("weil_gaussian.gram.l2_gram_matrix", lambda _: matrix)
+    family = PolynomialGaussianFamily(0.0, 1.0)
+    result = l2_gram_diagnostics((family, family))
+    assert result.is_positive_semidefinite
+    np.testing.assert_array_equal(result.relative_spectrum, [1.0, 0.0])
+    np.testing.assert_array_equal(result.cumulative_spectral_energy, [1.0, 1.0])
+
+
+def test_spectral_decay_normalization_avoids_sum_overflow(monkeypatch):
+    matrix = np.diag([1e308, 1e308])
+    monkeypatch.setattr("weil_gaussian.gram.l2_gram_matrix", lambda _: matrix)
+    family = PolynomialGaussianFamily(0.0, 1.0)
+    result = l2_gram_diagnostics((family, family))
+    np.testing.assert_array_equal(result.relative_spectrum, [1.0, 1.0])
+    np.testing.assert_array_equal(result.cumulative_spectral_energy, [0.5, 1.0])
+
+
+@pytest.mark.parametrize(
+    "base,changed",
+    [
+        (
+            (PolynomialGaussianFamily(0.2, 0.8),),
+            (PolynomialGaussianFamily(0.3, 0.8),),
+        ),
+        (
+            (PolynomialGaussianFamily(0.2, 0.8), PolynomialGaussianFamily(1.0, 0.9)),
+            (PolynomialGaussianFamily(0.2, 0.81), PolynomialGaussianFamily(1.0, 0.9)),
+        ),
+        (
+            (
+                PolynomialGaussianFamily(0.2, 0.8, (0.5j, 0.7j)),
+                PolynomialGaussianFamily(1.1, 0.9, (0.5j, 0.7j)),
+            ),
+            (
+                PolynomialGaussianFamily(0.21, 0.8, (0.5j, 0.7j)),
+                PolynomialGaussianFamily(1.1, 0.9, (0.5j, 0.7j)),
+            ),
+        ),
+        (
+            (
+                PolynomialGaussianFamily(0.0, 1.0, (0.5j, 0.3 + 0.4j)),
+                PolynomialGaussianFamily(0.7, 0.9, (0.5j, 0.3 + 0.4j)),
+                PolynomialGaussianFamily(1.4, 1.1, (0.5j, 0.3 + 0.4j)),
+            ),
+            (
+                PolynomialGaussianFamily(0.0, 1.0, (0.5j, 0.3 + 0.4j)),
+                PolynomialGaussianFamily(0.72, 0.9, (0.5j, 0.3 + 0.4j)),
+                PolynomialGaussianFamily(1.4, 1.1, (0.5j, 0.3 + 0.4j)),
+            ),
+        ),
+    ],
+)
+def test_weyl_eigenvalue_shift_bound_and_svd_norm(base, changed):
+    result = l2_gram_sensitivity(base, changed)
+    independent_norm = np.linalg.svd(result.perturbation_matrix, compute_uv=False)[0]
+    assert result.perturbation_spectral_norm == pytest.approx(
+        independent_norm, rel=2e-13, abs=2e-13
+    )
+    np.testing.assert_allclose(
+        result.absolute_eigenvalue_shifts,
+        np.abs(
+            np.linalg.eigvalsh(result.perturbed.matrix)
+            - np.linalg.eigvalsh(result.baseline.matrix)
+        ),
+        rtol=2e-13,
+        atol=2e-13,
+    )
+    assert (
+        result.maximum_observed_eigenvalue_shift
+        <= result.eigenvalue_shift_bound + 1e-12
+    )
+    assert result.eigenvalue_shift_bound == result.perturbation_spectral_norm
+    assert not result.perturbation_matrix.flags.writeable
+    assert not result.absolute_eigenvalue_shifts.flags.writeable
+
+
+def test_identical_families_have_zero_observed_and_bounded_shift():
+    families = (
+        PolynomialGaussianFamily(0.4, 0.7, (0.5j, 0.8j)),
+        PolynomialGaussianFamily(1.2, 0.9, (0.5j, 0.8j)),
+    )
+    result = l2_gram_sensitivity(families, families)
+    assert result.perturbation_spectral_norm == 0.0
+    assert result.maximum_observed_eigenvalue_shift == 0.0
+    np.testing.assert_array_equal(result.perturbation_matrix, np.zeros((2, 2)))
+    assert result.condition_number_upper_bound == pytest.approx(
+        result.baseline.condition_number
+    )
+
+
+def test_scalar_gram_weyl_shift_bound_is_exact():
+    original = PolynomialGaussianFamily(0.2, 0.8)
+    changed = PolynomialGaussianFamily(0.7, 0.9)
+    result = l2_gram_sensitivity((original,), (changed,))
+    assert result.maximum_observed_eigenvalue_shift == pytest.approx(
+        result.eigenvalue_shift_bound, rel=1e-14
+    )
+
+
+def test_condition_upper_bound_encloses_computed_perturbed_condition():
+    baseline = (
+        PolynomialGaussianFamily(0.1, 0.8),
+        PolynomialGaussianFamily(2.0, 0.9),
+    )
+    perturbed = (baseline[0], PolynomialGaussianFamily(2.001, 0.9))
+    result = l2_gram_sensitivity(baseline, perturbed)
+    assert result.smallest_eigenvalue_lower_bound > 0.0
+    assert (
+        result.condition_number_upper_bound >= result.perturbed.condition_number - 1e-12
+    )
+    assert (
+        result.largest_eigenvalue_upper_bound
+        >= result.perturbed.eigenvalues[-1] - 1e-12
+    )
+    assert (
+        result.smallest_eigenvalue_lower_bound
+        <= result.perturbed.eigenvalues[0] + 1e-12
+    )
+
+
+def test_large_perturbation_has_no_finite_condition_bound():
+    original = (
+        PolynomialGaussianFamily(0.0, 0.8),
+        PolynomialGaussianFamily(1.2, 0.9),
+    )
+    changed = (original[0], original[0])
+    result = l2_gram_sensitivity(original, changed)
+    assert result.perturbed.effective_rank == 1
+    assert result.smallest_eigenvalue_lower_bound <= 0.0
+    assert math.isinf(result.condition_number_upper_bound)
+
+
+def test_reversing_perturbation_preserves_norm_and_reverses_matrix():
+    left = (
+        PolynomialGaussianFamily(0.3, 0.8),
+        PolynomialGaussianFamily(1.3, 1.1),
+    )
+    right = (PolynomialGaussianFamily(0.31, 0.8), left[1])
+    forward = l2_gram_sensitivity(left, right)
+    backward = l2_gram_sensitivity(right, left)
+    np.testing.assert_allclose(
+        forward.perturbation_matrix, -backward.perturbation_matrix
+    )
+    np.testing.assert_allclose(
+        forward.absolute_eigenvalue_shifts, backward.absolute_eigenvalue_shifts
+    )
+    assert forward.perturbation_spectral_norm == pytest.approx(
+        backward.perturbation_spectral_norm
+    )
+
+
+@pytest.mark.parametrize(
+    "baseline,perturbed",
+    [
+        ((), (PolynomialGaussianFamily(0.0, 1.0),)),
+        ((PolynomialGaussianFamily(0.0, 1.0),), ()),
+        (
+            (PolynomialGaussianFamily(0.0, 1.0),),
+            (PolynomialGaussianFamily(0.0, 1.0),) * 2,
+        ),
+        ((PolynomialGaussianFamily(0.0, 1.0),), ("bad",)),
+    ],
+)
+def test_sensitivity_rejects_empty_mismatched_or_invalid_families(baseline, perturbed):
+    with pytest.raises((TypeError, ValueError)):
+        l2_gram_sensitivity(baseline, perturbed)
+
+
+@pytest.mark.parametrize("tolerance", [0.0, 1.0, math.nan, math.inf])
+def test_sensitivity_rejects_invalid_relative_tolerance(tolerance):
+    family = PolynomialGaussianFamily(0.0, 1.0)
+    with pytest.raises(ValueError, match="relative_tolerance"):
+        l2_gram_sensitivity((family,), (family,), tolerance)
 
 
 @pytest.mark.parametrize(
@@ -251,11 +472,16 @@ def test_finite_weil_archimedean_diagonal_against_independent_quadrature():
     family = PolynomialGaussianFamily(0.6, 0.8)
     result = finite_weil_diagnostics((family,), 3)
     with mp.workdps(28):
-        integral = mp.quad(
-            lambda t: mp.re(mp.digamma(mp.mpf("0.25") + mp.mpc(0, 0.5) * t))
-            * _mp_fourier(family, t) ** 2,
-            [0, mp.mpf("0.6"), mp.mpf("12")],
-        ) / mp.pi
+        integral = (
+            mp.quad(
+                lambda t: (
+                    mp.re(mp.digamma(mp.mpf("0.25") + mp.mpc(0, 0.5) * t))
+                    * _mp_fourier(family, t) ** 2
+                ),
+                [0, mp.mpf("0.6"), mp.mpf("12")],
+            )
+            / mp.pi
+        )
         reference = integral - _mp_cross(family, family, 0) * mp.log(mp.pi)
     assert result.archimedean_matrix[0, 0] == pytest.approx(
         float(reference), rel=5e-9, abs=5e-9
@@ -264,7 +490,7 @@ def test_finite_weil_archimedean_diagonal_against_independent_quadrature():
 
 def test_finite_weil_rejects_nonconverged_archimedean_quadrature(monkeypatch):
     def warning_quad(*_args, **_kwargs):
-        warnings.warn("forced nonconvergence", IntegrationWarning)
+        warnings.warn("forced nonconvergence", IntegrationWarning, stacklevel=2)
         return 0.0, 0.0
 
     monkeypatch.setattr("weil_gaussian.gram.quad", warning_quad)
@@ -274,12 +500,16 @@ def test_finite_weil_rejects_nonconverged_archimedean_quadrature(monkeypatch):
 
 @pytest.mark.parametrize("error", [1.0, math.nan])
 def test_finite_weil_rejects_invalid_archimedean_error_estimate(monkeypatch, error):
-    monkeypatch.setattr("weil_gaussian.gram.quad", lambda *_args, **_kwargs: (0.0, error))
+    monkeypatch.setattr(
+        "weil_gaussian.gram.quad", lambda *_args, **_kwargs: (0.0, error)
+    )
     with pytest.raises(FloatingPointError):
         finite_weil_matrix((PolynomialGaussianFamily(0.0, 1.0),), 2)
 
 
-@pytest.mark.parametrize("center,width,cutoff", [(0.0, 1.0, 20), (1.0, 0.8, 20), (3.0, 1.2, 50)])
+@pytest.mark.parametrize(
+    "center,width,cutoff", [(0.0, 1.0, 20), (1.0, 0.8, 20), (3.0, 1.2, 50)]
+)
 def test_finite_weil_diagonal_matches_scalar_balance(center, width, cutoff):
     family = PolynomialGaussianFamily(center, width)
     matrix = finite_weil_diagnostics((family,), cutoff)

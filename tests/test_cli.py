@@ -5,15 +5,15 @@ from __future__ import annotations
 import json
 import math
 import os
-from pathlib import Path
 import subprocess
 import sys
+from importlib import resources
+from pathlib import Path
 
 import pytest
 
-from weil_gaussian import autocorrelation, truncated_prime_term
+from weil_gaussian import autocorrelation, cli, truncated_prime_term
 from weil_gaussian.cli import main
-
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -38,6 +38,7 @@ def test_module_help_lists_all_commands():
     assert "verify" in result.stdout
     assert "prime-sum" in result.stdout
     assert "benchmark" in result.stdout
+    assert "reproduce" in result.stdout
 
 
 def test_verify_text_output_has_independent_check_and_status(capsys):
@@ -58,20 +59,23 @@ def test_verify_repeated_positions_generate_all_rows(capsys):
 
 
 def test_verify_json_reports_high_precision_comparison(capsys):
-    assert main(
-        [
-            "verify",
-            "--center",
-            "2.5",
-            "--width",
-            "0.7",
-            "--position",
-            "0.3",
-            "--dps",
-            "45",
-            "--json",
-        ]
-    ) == 0
+    assert (
+        main(
+            [
+                "verify",
+                "--center",
+                "2.5",
+                "--width",
+                "0.7",
+                "--position",
+                "0.3",
+                "--dps",
+                "45",
+                "--json",
+            ]
+        )
+        == 0
+    )
     report = json.loads(capsys.readouterr().out)
     assert report["quadrature_digits"] == 45
     assert report["passed"] is True
@@ -80,15 +84,50 @@ def test_verify_json_reports_high_precision_comparison(capsys):
         "autocorrelation",
     }
     assert max(row["absolute_error"] for row in report["rows"]) < 1e-12
+    assert report["gauss_hermite_reported_order"] == 96
+    assert len(report["schemes"]) == 3
+    assert "not rigorous enclosures" in report["error_certification"]
+    for row in report["rows"]:
+        assert row["adaptive_error_estimate"] >= 0
+        assert row["hermite_refinement_delta"] >= 0
+        assert row["analytic_adaptive_abs_error"] < 1e-9
+        assert row["analytic_hermite_abs_error"] < 1e-9
+        assert row["cross_scheme_discrepancy"] < 1e-9
+        assert row["finite_cutoff_tail_bound"] is None
+
+
+def test_verify_text_shows_independent_schemes_and_limit(capsys):
+    assert main(["verify", "--position", "0.8", "--hermite-order", "24"]) == 0
+    output = capsys.readouterr().out
+    assert "adaptive Gauss-Kronrod and Gauss-Hermite (orders 24/48)" in output
+    assert "not rigorous bounds" in output
+
+
+@pytest.mark.parametrize("order", ["11", "49", "12.5", "nan"])
+def test_verify_rejects_invalid_hermite_order(order):
+    result = _module("verify", "--hermite-order", order)
+    assert result.returncode == 2
+    assert "error:" in result.stderr
 
 
 def test_verify_multi_zero_family_against_independent_quadrature(capsys):
-    assert main(
-        [
-            "verify", "--zero", "0.5j", "--zero", "1+0.5j",
-            "--position", "0.8", "--dps", "45", "--json",
-        ]
-    ) == 0
+    assert (
+        main(
+            [
+                "verify",
+                "--zero",
+                "0.5j",
+                "--zero",
+                "1+0.5j",
+                "--position",
+                "0.8",
+                "--dps",
+                "45",
+                "--json",
+            ]
+        )
+        == 0
+    )
     report = json.loads(capsys.readouterr().out)
     assert report["zero_generators"] == ["0.5j", "(1+0.5j)"]
     assert report["passed"] is True
@@ -96,9 +135,7 @@ def test_verify_multi_zero_family_against_independent_quadrature(capsys):
 
 
 def test_verify_arbitrary_complex_zero_family_without_weil_claim(capsys):
-    assert main(
-        ["verify", "--zero", "1+0.5i", "--position", "0.3", "--json"]
-    ) == 0
+    assert main(["verify", "--zero", "1+0.5i", "--position", "0.3", "--json"]) == 0
     report = json.loads(capsys.readouterr().out)
     assert report["zero_generators"] == ["(1+0.5j)"]
     assert report["passed"] is True
@@ -113,7 +150,10 @@ def test_verify_strict_tolerance_exits_nonzero(capsys):
 
 
 def test_verify_zero_center_case(capsys):
-    assert main(["verify", "--center", "0", "--width", "1", "--position", "0", "--json"]) == 0
+    assert (
+        main(["verify", "--center", "0", "--width", "1", "--position", "0", "--json"])
+        == 0
+    )
     report = json.loads(capsys.readouterr().out)
     assert report["passed"] is True
     assert report["center"] == 0
@@ -139,9 +179,21 @@ def test_verify_rejects_bad_arguments(args):
 
 
 def test_prime_json_matches_finite_sum_and_has_scope_fields(capsys):
-    assert main(
-        ["prime-sum", "--center", "1.3", "--width", "0.9", "--limit", "30", "--json"]
-    ) == 0
+    assert (
+        main(
+            [
+                "prime-sum",
+                "--center",
+                "1.3",
+                "--width",
+                "0.9",
+                "--limit",
+                "30",
+                "--json",
+            ]
+        )
+        == 0
+    )
     report = json.loads(capsys.readouterr().out)
     assert report["finite_prime_term"] == pytest.approx(
         truncated_prime_term(30, 1.3, 0.9)
@@ -196,17 +248,22 @@ def test_prime_rejects_bad_arguments(args):
 
 
 def test_module_verify_process_returns_success():
-    result = _module(
-        "verify", "--center", "1.2", "--width", "0.9", "--position", "0.8"
-    )
+    result = _module("verify", "--center", "1.2", "--width", "0.9", "--position", "0.8")
     assert result.returncode == 0
     assert "PASS:" in result.stdout
 
 
 def test_module_verify_process_returns_failure_when_tolerance_is_too_strict():
     result = _module(
-        "verify", "--center", "1.2", "--width", "0.9", "--position", "0.8",
-        "--tolerance", "1e-30"
+        "verify",
+        "--center",
+        "1.2",
+        "--width",
+        "0.9",
+        "--position",
+        "0.8",
+        "--tolerance",
+        "1e-30",
     )
     assert result.returncode == 1
     assert "FAIL:" in result.stdout
@@ -235,12 +292,23 @@ def test_benchmark_json_has_reproducibility_metadata(capsys):
 
 
 def test_benchmark_multi_zero_json(capsys):
-    assert main(
-        [
-            "benchmark", "--zero", "0.5j", "--zero", "1+0.5j",
-            "--points", "10", "--repeats", "1", "--json",
-        ]
-    ) == 0
+    assert (
+        main(
+            [
+                "benchmark",
+                "--zero",
+                "0.5j",
+                "--zero",
+                "1+0.5j",
+                "--points",
+                "10",
+                "--repeats",
+                "1",
+                "--json",
+            ]
+        )
+        == 0
+    )
     report = json.loads(capsys.readouterr().out)
     assert report["zero_generators"] == ["0.5j", "(1+0.5j)"]
     assert all(row["median_seconds"] >= 0 for row in report["measurements"])
@@ -282,3 +350,136 @@ def test_missing_command_is_usage_error():
     result = _module()
     assert result.returncode == 2
     assert "required" in result.stderr
+
+
+def test_reproduce_subprocess_writes_matching_json_and_markdown_artifacts(tmp_path):
+    result = _module("reproduce", "--check", "--json", "--output-dir", str(tmp_path))
+    assert result.returncode == 0, result.stderr
+    assert "golden-vector check passed" in result.stderr
+    json_path = tmp_path / "reproducibility.json"
+    markdown_path = tmp_path / "reproducibility.md"
+    assert json_path.read_text(encoding="utf-8") == result.stdout
+    report = json.loads(result.stdout)
+    assert report["all_passed"] is True
+    assert report["golden_vector_check"] == {
+        "passed": True,
+        "problems": [],
+        "max_absolute_error": 0.0,
+    }
+    assert report["provenance"]["random_seed"] is None
+    assert len(report["rows"]) == 4
+    assert len(report["gram"]["eigenvalues"]) == 3
+    markdown = markdown_path.read_text(encoding="utf-8")
+    assert "# Weil Gaussian Lab reproducibility report" in markdown
+    for row in report["rows"]:
+        assert row["id"] in markdown
+    assert "All checks passed: true." in markdown
+    assert "Golden-vector fixture check: passed." in markdown
+
+
+def test_packaged_golden_fixture_is_identical_to_test_reference():
+    packaged = resources.files("weil_gaussian").joinpath("data", "golden_vectors.json")
+    committed = ROOT / "tests/data/golden_vectors.json"
+    assert packaged.read_bytes() == committed.read_bytes()
+
+
+def test_reproduce_without_output_dir_only_prints_markdown(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.chdir(tmp_path)
+    assert main(["reproduce"]) == 0
+    output = capsys.readouterr().out
+    assert output.startswith("# Weil Gaussian Lab reproducibility report")
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_reproduce_check_detects_changed_high_precision_reference(tmp_path, capsys):
+    fixture = json.loads(
+        (ROOT / "tests/data/golden_vectors.json").read_text(encoding="utf-8")
+    )
+    fixture["cases"][0]["reference"]["inverse"] = "0"
+    changed = tmp_path / "changed.json"
+    changed.write_text(json.dumps(fixture), encoding="utf-8")
+    artifacts = tmp_path / "artifacts"
+    assert (
+        main(
+            [
+                "reproduce",
+                "--check",
+                "--golden-file",
+                str(changed),
+                "--output-dir",
+                str(artifacts),
+                "--json",
+            ]
+        )
+        == 1
+    )
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+    assert report["all_passed"] is False
+    assert report["golden_vector_check"]["passed"] is False
+    assert (
+        "base_origin.inverse reference differs"
+        in report["golden_vector_check"]["problems"]
+    )
+    assert (
+        json.loads((artifacts / "reproducibility.json").read_text(encoding="utf-8"))
+        == report
+    )
+    markdown = (artifacts / "reproducibility.md").read_text(encoding="utf-8")
+    assert "All checks passed: false." in markdown
+    assert "Golden-vector fixture check: failed." in markdown
+    assert "base_origin.inverse reference differs" in captured.err
+
+
+def test_reproduce_check_rejects_missing_fixture(tmp_path, capsys):
+    fixture = tmp_path / "missing.json"
+    assert main(["reproduce", "--golden-file", str(fixture), "--json"]) == 1
+    captured = capsys.readouterr()
+    assert "golden-vector fixture missing" in captured.err
+    report = json.loads(captured.out)
+    assert report["all_passed"] is False
+    assert report["golden_vector_check"]["passed"] is False
+    assert "fixture missing" in report["golden_vector_check"]["problems"][0]
+
+
+@pytest.mark.parametrize(
+    ("contents", "problem"),
+    [("{", "not valid JSON"), ("[]", "not a JSON object")],
+)
+def test_reproduce_check_rejects_malformed_fixture(tmp_path, capsys, contents, problem):
+    fixture = tmp_path / "invalid.json"
+    fixture.write_text(contents, encoding="utf-8")
+    assert main(["reproduce", "--golden-file", str(fixture), "--json"]) == 1
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+    assert report["all_passed"] is False
+    assert report["golden_vector_check"]["passed"] is False
+    assert problem in report["golden_vector_check"]["problems"][0]
+    assert "golden-vector check failed" in captured.err
+
+
+def test_reproduce_rejects_output_dir_that_is_a_file(tmp_path, capsys):
+    destination = tmp_path / "occupied"
+    destination.write_text("keep", encoding="utf-8")
+    assert main(["reproduce", "--output-dir", str(destination)]) == 1
+    captured = capsys.readouterr()
+    assert "command failed" in captured.err
+    assert destination.read_text(encoding="utf-8") == "keep"
+
+
+def test_atomic_artifact_write_preserves_old_file_on_replace_failure(
+    tmp_path, monkeypatch
+):
+    destination = tmp_path / "reproducibility.json"
+    destination.write_text("original", encoding="utf-8")
+
+    def fail_replace(source, target):
+        raise OSError("simulated replacement failure")
+
+    monkeypatch.setattr(cli.os, "replace", fail_replace)
+    with pytest.raises(OSError, match="simulated replacement failure"):
+        cli._write_text_atomic(destination, "updated")
+    assert destination.read_text(encoding="utf-8") == "original"
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["reproducibility.json"]

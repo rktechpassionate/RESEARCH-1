@@ -7,10 +7,10 @@ has coefficient 2. No tail bound, zero sum, or RH test is supplied.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
 import operator
-from typing import Iterator
+from collections.abc import Iterator
+from dataclasses import dataclass
 
 from .core import _parameters, autocorrelation
 
@@ -82,7 +82,8 @@ def prime_power_terms(
 
     ``Lambda(n)`` is ``log(p)`` when ``n=p**k`` for a prime ``p`` and integer
     ``k>=1``, and zero otherwise. This function does not estimate the omitted
-    infinite tail.
+    infinite tail. Contributions use double-precision autocorrelations and
+    ordinary floating-point logarithms; summation below uses ``math.fsum``.
     """
     limit = _cutoff(limit)
     center, width = _parameters(center, width)

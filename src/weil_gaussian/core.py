@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import TypeAlias, cast, overload
 
 import numpy as np
+import numpy.typing as npt
+
+RealArray: TypeAlias = npt.NDArray[np.float64]
+ComplexArray: TypeAlias = npt.NDArray[np.complex128]
+RealResult: TypeAlias = float | RealArray
+FourierResult: TypeAlias = float | complex | RealArray | ComplexArray
 
 
 def _parameters(center: float, width: float) -> tuple[float, float]:
@@ -19,7 +25,7 @@ def _parameters(center: float, width: float) -> tuple[float, float]:
     return center, width
 
 
-def _real_input(values: Any, name: str) -> np.ndarray:
+def _real_input(values: npt.ArrayLike, name: str) -> RealArray:
     """Convert a real scalar or array while rejecting complex/nonfinite data."""
     raw = np.asarray(values)
     if np.iscomplexobj(raw):
@@ -30,11 +36,30 @@ def _real_input(values: Any, name: str) -> np.ndarray:
     return data
 
 
-def _scalar_or_array(result: np.ndarray, input_data: np.ndarray) -> Any:
+def _scalar_or_array(
+    result: RealArray | ComplexArray, input_data: RealArray | ComplexArray
+) -> FourierResult:
+    """Preserve scalar versus array inputs, including complex scalar dtype."""
     return result.item() if input_data.ndim == 0 else result
 
 
-def fourier_profile(frequency: Any, center: float, width: float) -> Any:
+@overload
+def fourier_profile(frequency: float, center: float, width: float) -> float: ...
+
+
+@overload
+def fourier_profile(frequency: complex, center: float, width: float) -> complex: ...
+
+
+@overload
+def fourier_profile(
+    frequency: npt.ArrayLike, center: float, width: float
+) -> FourierResult: ...
+
+
+def fourier_profile(
+    frequency: npt.ArrayLike, center: float, width: float
+) -> FourierResult:
     r"""Return the entire Fourier-side Gaussian profile.
 
     With ``a=center`` and ``s=width``, this is
@@ -44,7 +69,8 @@ def fourier_profile(frequency: Any, center: float, width: float) -> Any:
 
     ``frequency`` may be a real or complex scalar or array. In particular,
     the profile vanishes at ``xi=+/-0.5j``. Large imaginary inputs can
-    overflow in ordinary double precision.
+    overflow in ordinary double precision. Near a root, subtraction may
+    lose relative accuracy even if the absolute error is small.
     """
     center, width = _parameters(center, width)
     frequency = np.asarray(frequency)
@@ -62,12 +88,24 @@ def fourier_profile(frequency: Any, center: float, width: float) -> Any:
     return _scalar_or_array(result, data)
 
 
-def inverse_profile(position: Any, center: float, width: float) -> Any:
+@overload
+def inverse_profile(position: float, center: float, width: float) -> float: ...
+
+
+@overload
+def inverse_profile(
+    position: npt.ArrayLike, center: float, width: float
+) -> RealResult: ...
+
+
+def inverse_profile(position: npt.ArrayLike, center: float, width: float) -> RealResult:
     r"""Return the real inverse Fourier transform of :func:`fourier_profile`.
 
     This is the closed-form action of ``-d²/dx² + 1/4`` on the inverse
     transform of the paired Gaussian peaks. ``position`` is real. A scalar
-    input gives a float; an array input gives a NumPy array.
+    input gives a float; an array input gives a NumPy array. The closed form
+    uses double precision and can lose relative accuracy at cancellation
+    points; it is not an error-bounded evaluation.
     """
     center, width = _parameters(center, width)
     x = _real_input(position, "position")
@@ -81,17 +119,28 @@ def inverse_profile(position: Any, center: float, width: float) -> Any:
         * np.exp(-0.5 * (width * x) ** 2)
         * oscillation
     )
-    return _scalar_or_array(result, x)
+    return cast(RealResult, _scalar_or_array(result, x))
 
 
-def autocorrelation(position: Any, center: float, width: float) -> Any:
+@overload
+def autocorrelation(position: float, center: float, width: float) -> float: ...
+
+
+@overload
+def autocorrelation(
+    position: npt.ArrayLike, center: float, width: float
+) -> RealResult: ...
+
+
+def autocorrelation(position: npt.ArrayLike, center: float, width: float) -> RealResult:
     r"""Return ``Phi(x) = (f * f_tilde)(x)`` in closed form.
 
     ``f`` is :func:`inverse_profile` and ``f_tilde(x)=f(-x)``. For this even,
     real family, ``Phi`` is the inverse transform of ``fourier_profile**2``.
     The implementation applies ``(-d²/dx² + 1/4)**2`` to the inverse
     transform of the squared Gaussian pair; it does not integrate or
-    interpolate a sampled signal.
+    interpolate a sampled signal. The expression uses double precision;
+    small results formed by cancellation may have large relative error.
     """
     center, width = _parameters(center, width)
     x = _real_input(position, "position")
@@ -110,7 +159,7 @@ def autocorrelation(position: Any, center: float, width: float) -> Any:
             + math.exp(-((center / width) ** 2)) * cross_polynomial
         )
     )
-    return _scalar_or_array(result, x)
+    return cast(RealResult, _scalar_or_array(result, x))
 
 
 def total_mass(center: float, width: float) -> float:
@@ -130,6 +179,8 @@ def autocorrelation_at_zero(center: float, width: float) -> float:
     w2 = width * width
     base = 0.75 * w2 * w2 + 0.25 * w2 + 0.0625
     diagonal = center**4 + (3 * w2 + 0.5) * center**2 + base
-    return width / math.sqrt(math.pi) * (
-        diagonal + math.exp(-((center / width) ** 2)) * base
+    return (
+        width
+        / math.sqrt(math.pi)
+        * (diagonal + math.exp(-((center / width) ** 2)) * base)
     )

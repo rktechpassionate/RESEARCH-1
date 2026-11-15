@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
 import math
 import warnings
+from dataclasses import asdict
 
 import mpmath as mp
 import pytest
@@ -29,8 +29,7 @@ def _mp_spectrum(t: mp.mpf, center: float, width: float, zeros: tuple[complex, .
         else:
             polynomial *= (t * t - square) * (t * t - mp.conj(square))
     return polynomial * (
-        mp.exp(-((t - a) / s) ** 2 / 2)
-        + mp.exp(-((t + a) / s) ** 2 / 2)
+        mp.exp(-(((t - a) / s) ** 2) / 2) + mp.exp(-(((t + a) / s) ** 2) / 2)
     )
 
 
@@ -51,16 +50,16 @@ def _mp_integral(integrand, center: float, width: float):
 def test_archimedean_against_independent_mpmath(center, width, zeros):
     family = PolynomialGaussianFamily(center, width, zeros)
     with mp.workdps(45):
-        spectrum = lambda t: _mp_spectrum(t, center, width, zeros)
+
+        def spectrum(t):
+            return _mp_spectrum(t, center, width, zeros)
+
         weighted = _mp_integral(
-            lambda t: mp.re(mp.digamma(mp.mpf("0.25") + 0.5j * t))
-            * spectrum(t) ** 2,
+            lambda t: mp.re(mp.digamma(mp.mpf("0.25") + 0.5j * t)) * spectrum(t) ** 2,
             center,
             width,
         )
-        spectral_energy = _mp_integral(
-            lambda t: spectrum(t) ** 2, center, width
-        )
+        spectral_energy = _mp_integral(lambda t: spectrum(t) ** 2, center, width)
         expected = weighted / mp.pi - spectral_energy / mp.pi * mp.log(mp.pi)
     actual = archimedean_component(family)
     assert actual.converged
@@ -94,12 +93,16 @@ def test_finite_prime_component_against_direct_fourier_integral(cutoff):
             if von_mangoldt == 0:
                 continue
             log_n = mp.log(n)
-            phi = _mp_integral(
-                lambda t: _mp_spectrum(t, center, width, zeros) ** 2
-                * mp.cos(t * log_n),
-                center,
-                width,
-            ) / mp.pi
+            phi = (
+                _mp_integral(
+                    lambda t, lag=log_n: (
+                        _mp_spectrum(t, center, width, zeros) ** 2 * mp.cos(t * lag)
+                    ),
+                    center,
+                    width,
+                )
+                / mp.pi
+            )
             terms.append(2 * mp.mpf(str(von_mangoldt)) * phi / mp.sqrt(n))
         expected = mp.fsum(terms)
     actual = finite_prime_component(family, cutoff)
@@ -160,7 +163,7 @@ def test_integration_warning_is_reported_not_silently_discarded(monkeypatch):
     from weil_gaussian import balance
 
     def warning_quad(*args, **kwargs):
-        warnings.warn("mock convergence warning", IntegrationWarning)
+        warnings.warn("mock convergence warning", IntegrationWarning, stacklevel=2)
         return 1.0, 0.01
 
     monkeypatch.setattr(balance, "quad", warning_quad)

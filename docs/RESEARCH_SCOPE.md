@@ -2,7 +2,7 @@
 
 ## Exact identities and proven properties
 
-Version 0.2.0 implements a real-even polynomial-Gaussian Fourier family whose
+Version 1.0.0 implements a real-even polynomial-Gaussian Fourier family whose
 root factors can enforce multiple prescribed complex frequencies and their
 necessary negative and conjugate partners. The inverse transform and
 autocorrelation follow from Gaussian differentiation. The original
@@ -12,10 +12,13 @@ two-parameter family is the special case with zeros at $\pm i/2$. The
 At zero lag, the cross-autocorrelation of any finite collection of these
 families is its $L^2$ Gram matrix. This matrix is symmetric and positive
 semidefinite by the ordinary inner-product identity, independently of RH.
-Its eigenvalues and condition number describe the numerical independence
-of the chosen test functions. Numerical tests compare selected formulas
-against independently integrated Fourier definitions; the tests are
-regression evidence, not a proof of all mathematical statements.
+Its eigenvalues, condition number, relative spectral decay, and computed
+perturbation sensitivity describe the numerical independence of the chosen
+test functions. Weyl bounds apply to the computed Gram matrices; they do not
+enclose every floating-point or quadrature error relative to an exact Gram.
+Numerical tests compare selected formulas against independently integrated
+Fourier definitions; the tests are regression evidence, not a proof of all
+mathematical statements.
 
 The Fourier transform convention is
 
@@ -40,6 +43,17 @@ missing prime-tail bound value of null. The corresponding cross-family
 finite Weil matrix and its eigenvalues are also cutoff-dependent.
 Families without the $\pm i/2$ zeros are rejected by these Weil-named
 diagnostics. The coefficient $2$ follows the Fourier convention above.
+
+The `verify` command compares analytic inverse-transform and autocorrelation
+values with adaptive Gauss–Kronrod integration and a separate Gauss–Hermite
+calculation. It reports residuals, an adaptive integration error estimate,
+an order-doubling difference, and cross-scheme discrepancy. These are
+empirical checks, not certified error enclosures. The committed
+[golden vectors](../tests/data/golden_vectors.json) record high-precision
+spectrum evaluations and integral values for specific cases, with double-precision
+comparison tolerances. The `reproduce` command regenerates those cases and
+paper artifacts; they do not guarantee machine-epsilon accuracy across all
+parameters or systems.
 
 No certified bound is supplied for prime powers beyond $N$; adaptive
 quadrature error estimates are not rigorous enclosures. Hence these finite

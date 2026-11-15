@@ -18,12 +18,38 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install package and test dependencies
-        run: python -m pip install -e '.[test]'
+      - name: Install package and development dependencies
+        run: python -m pip install -e '.[dev]'
+      - name: Ruff lint
+        run: ruff check .
+      - name: Ruff format
+        run: ruff format --check .
+      - name: Mypy strict typing
+        run: mypy src/weil_gaussian
       - name: Run independent numerical checks
         run: python -m pytest -q
+      - name: Check committed golden vectors
+        run: weil-gaussian reproduce --check --json > /tmp/weil-gaussian-reproduce-check.json
+      - name: Smoke test installed wheel
+        if: matrix.python-version == '3.12'
+        run: |
+          python -m pip wheel --no-deps . --wheel-dir /tmp/weil-wheel-dist
+          python -m venv /tmp/weil-wheel-venv
+          /tmp/weil-wheel-venv/bin/python -m pip install /tmp/weil-wheel-dist/*.whl
+          cd /tmp
+          /tmp/weil-wheel-venv/bin/python -c "from importlib.resources import files; assert files('weil_gaussian').joinpath('py.typed').is_file()"
+          /tmp/weil-wheel-venv/bin/weil-gaussian reproduce --check --json > /tmp/weil-wheel-reproduce-check.json
       - name: Reproduce quadrature comparison
         run: python examples/compare_with_quadrature.py
+      - name: Generate paper artifacts
+        if: matrix.python-version == '3.12'
+        run: weil-gaussian reproduce --output-dir reproducibility
+      - name: Upload paper artifacts
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: reproducibility-v1
+          path: reproducibility/
 
   manuscript:
     runs-on: ubuntu-latest

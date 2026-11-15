@@ -1,15 +1,18 @@
 # Weil Gaussian Lab
 
 [![CI](https://github.com/rktechpassionate/RESEARCH-1/actions/workflows/ci.yml/badge.svg)](https://github.com/rktechpassionate/RESEARCH-1/actions/workflows/ci.yml)
-![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)
+![Version 1.0.0](https://img.shields.io/badge/version-1.0.0-blue)
+![Python 3.10–3.12](https://img.shields.io/badge/Python-3.10%E2%80%933.12-blue)
 [![MIT license](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-Weil Gaussian Lab is an MIT-licensed Python library for reproducible experiments
-with polynomial-Gaussian test functions. It combines analytic Fourier and
-autocorrelation formulas, multi-zero construction, Gram-matrix diagnostics,
-finite prime-power sums, and an independent high-precision CLI verifier. The
-[technical note (PDF)](paper/gaussian_identities.pdf) gives the definitions and
-derivations; [LaTeX source](paper/gaussian_identities.tex) is included.
+Weil Gaussian Lab 1.0.0 is an MIT-licensed, typed Python library for
+reproducible experiments with polynomial-Gaussian test functions. It combines
+analytic Fourier and autocorrelation formulas, multiple prescribed complex
+zeros, $L^2$ Gram diagnostics, finite prime-power calculations, two numerical
+quadrature cross-checks, and committed high-precision reference vectors. The
+[technical note (PDF)](paper/gaussian_identities.pdf) gives definitions,
+derivations, and a numerical table matching the CLI report; its
+[LaTeX source](paper/gaussian_identities.tex) is included.
 
 **Scope:** the \(L^2\) Gram matrix is positive semidefinite by construction.
 Finite Weil-form and prime-balance calculations are numerical diagnostics,
@@ -60,26 +63,55 @@ python examples/plot_profiles.py
 Python 3.10 or newer is required.
 
 ~~~bash
-python -m pip install -e '.[test]'
+python -m pip install -e '.[dev]'
 weil-gaussian verify --center 1.2 --width 0.9 --position 0.8 --dps 40
 python -m weil_gaussian prime-sum --center 1.2 --width 0.9 --limit 100
+weil-gaussian reproduce --check --output-dir artifacts
 weil-gaussian benchmark --points 100 --repeats 2
 ~~~
 
-A verifier run prints analytic values beside independently integrated Fourier
-values, absolute errors, and a final status. A sample run is:
+A `reproduce` run prints the paper's fixed numerical table and writes
+`artifacts/reproducibility.json` and `artifacts/reproducibility.md`.
+An excerpt from one run of the generated Markdown report is:
 
 ~~~text
-quantity          position       analytic     quadrature       abs error  status
-inverse               0.8     -0.0449014     -0.0449014      1.004e-16  PASS
-autocorrelation       0.8      -0.060856      -0.060856      6.272e-17  PASS
-PASS: 2 comparisons at 40 digits; numerical check only, not an RH test.
+| Case | a | sigma | x | f(x) | Phi(x) | Max absolute error |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| base_origin | 1.2 | 0.9 | 0 | 1.795240262 | 3.64469161 | 3.064e-16 |
+| base_offset | 1.2 | 0.9 | 0.8 | -0.04490139209 | -0.06085600649 | 3.827e-16 |
+| two_imaginary_zeros | 0.7 | 1.1 | 0.8 | -2.906565367 | -29.2549345 | 3.282e-15 |
+| complex_zero_orbit | 1.0 | 0.8 | 0.4 | 9.318736459 | 265.1303927 | 1.787e-13 |
+
+Gram minimum eigenvalue: 0.3224654265.
+Gram condition number: 1883.346262.
+Maximum Gram matrix absolute error: 1.291e-12.
+All checks passed: true.
 ~~~
 
-The last error digits depend on the numeric platform. Repeat the --zero
-option to verify a custom multi-zero family, for example
---zero 0.5j --zero 1+0.5j. The finite prime-power demonstration reports both
-the archimedean component and a cutoff-dependent balance. Abbreviated output:
+`reproduce --json` prints the structured report; `--check` compares
+regenerated high-precision values with
+[the committed golden vectors](tests/data/golden_vectors.json), whose
+byte-identical copy ships in the wheel. The values
+shown above are double-precision analytic results compared with 70-digit
+references from direct spectrum evaluation and Fourier integrals. Each
+maximum error includes the Fourier profile,
+inverse transform, autocorrelation, and total mass for that case. These
+case-specific errors have stated tolerances; they do not guarantee
+machine-epsilon accuracy for all parameter choices or platforms. The cases
+use no randomness, so no seed is needed. The observed error digits can vary
+slightly across numerical platforms. The float64 comparison criterion is
+`5e-12 + 5e-12 × |reference|`; committed decimal vectors are checked at
+`1e-48` absolute plus relative tolerance.
+
+`verify` compares analytic inverse and autocorrelation values with
+high-precision `mpmath` integration and two float64 quadrature routes:
+adaptive Gauss–Kronrod and Gauss–Hermite. Its errors, adaptive estimates,
+order-doubling differences, and pass thresholds are numerical checks, not
+rigorous error certificates. Repeat `--zero` for a custom multi-zero
+family, for example `--zero 0.5j --zero 1+0.5j`.
+
+The finite prime-power demonstration reports an archimedean component and
+a cutoff-dependent balance. Abbreviated output:
 
 ~~~text
 Finite prime-power diagnostic: center=1.2, width=0.9, cutoff=100
@@ -95,7 +127,7 @@ No prime-tail bound; not the full Weil form or an RH test.
 
 The benchmark reports median and range of wall-clock timings plus Python and
 NumPy versions; timings vary by machine and are not cross-machine performance
-claims. All three commands support help and JSON output for reproducible
+claims. All four commands support help and JSON output for reproducible
 scripts.
 
 The Python API also accepts NumPy-compatible arrays:
@@ -123,31 +155,46 @@ overlap = family.autocorrelation(position)
 | [Gram diagnostics](src/weil_gaussian/gram.py) | Pairings, eigenvalues, and conditioning across parameter grids | \(L^2\) positivity is unconditional; finite Weil results are exploratory |
 | [Arithmetic](src/weil_gaussian/arithmetic.py) | Enumerated prime-power terms through a cutoff | Finite sum, no tail estimate |
 | [Balance diagnostics](src/weil_gaussian/balance.py) | Archimedean integral versus finite prime-power term | Numerical balance, not the full Weil value |
-| [CLI](src/weil_gaussian/cli.py) | High-precision verification, prime balance, and environment-tagged benchmark output | Reproducible command output |
-| [Tests](tests) and [CI](.github/workflows/ci.yml) | Independent quadrature, invariants, edge cases, and paper build | Regression evidence, not proof of all claims |
+| [Verification](src/weil_gaussian/verification.py) | Two independent quadrature schemes and explicit residuals | Numerical evidence, not an integral error certificate |
+| [Reproducibility](src/weil_gaussian/repro.py) | Fixed paper cases, high-precision spectrum evaluation and integrals, and golden vectors | Deterministic case-specific regression |
+| [CLI](src/weil_gaussian/cli.py) | Verification, finite prime balance, benchmark, and paper artifacts | Human-readable and structured output |
+| [Tests](tests) and [CI](.github/workflows/ci.yml) | Fourier invariants, golden vectors, Ruff, strict mypy, pytest, and LaTeX | Regression evidence, not proof of all claims |
 
 The \(L^2\) Gram entries use
 \(G_{ij}=(2\pi)^{-1}\int_{\mathbb R}F_i(\xi)F_j(\xi)\,d\xi\).
 Its eigenvalues and condition number describe linear dependence of the chosen
-test functions. The finite Weil matrix and balance output depend on a
-specified prime cutoff; their eigenvalues cannot certify spectral positivity
-for the infinite problem.
+test functions. Relative eigenvalues and cumulative spectral energy show
+spectral decay. A sensitivity diagnostic compares two computed Grams and
+uses a Weyl bound based on their matrix difference; this bound does not
+include a certified enclosure for errors in the entries. The finite Weil
+matrix and balance output depend on a specified prime cutoff; their
+eigenvalues cannot certify spectral positivity for the infinite problem.
 
-## Reproduce and contribute
+See [architecture and numerical contract](docs/ARCHITECTURE.md) for module
+boundaries, normalization invariants, error interpretation, PEP 561 type
+information, and PR review.
+
+## Verify and contribute
 
 ~~~bash
+weil-gaussian reproduce --check --output-dir artifacts
 python -m pytest -q
+ruff check .
+ruff format --check .
+mypy
 python examples/compare_with_quadrature.py
 cd paper && latexmk -pdf -interaction=nonstopmode -halt-on-error gaussian_identities.tex
 ~~~
 
-Tests compare closed forms with independent high-precision defining integrals
-and exercise symmetry, normalization, parameter limits, invalid inputs, CLI
-behavior, and matrix diagnostics. The library's regular arrays use
-double-precision NumPy values; extreme parameters can lose relative precision
-or overflow. Report sensitive cases with a high-precision reference and an
-error estimate.
+CI runs Ruff lint and format, strict mypy and pytest on Python 3.10, 3.11,
+and 3.12, plus the manuscript build. Tests compare closed forms with
+independent defining integrals and exercise symmetry, normalization,
+parameter limits, invalid inputs, CLI behavior, and matrix diagnostics.
+The library's regular arrays use double-precision NumPy values; extreme
+parameters can lose relative precision or overflow. Report sensitive cases
+with a high-precision reference and a stated error estimate.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for mathematical and code review
 requirements, [SECURITY.md](SECURITY.md) for private vulnerability reporting,
-[LICENSE](LICENSE) for reuse, and [CITATION.cff](CITATION.cff) for citation.
+[LICENSE](LICENSE) for reuse, [CHANGELOG.md](CHANGELOG.md) for release history,
+and [CITATION.cff](CITATION.cff) for citation.

@@ -29,13 +29,15 @@ def main() -> None:
     fig, axes = plt.subplots(3, 1, figsize=(8, 8.5), layout="constrained")
     colors = ("#205072", "#2d936c", "#c65d35")
 
-    for center, color in zip(centers, colors):
+    for center, color in zip(centers, colors, strict=True):
         spectrum = fourier_profile(frequency, center, width)
         signal = inverse_profile(position, center, width)
         overlap = autocorrelation(position, center, width)
         label = rf"$a={center:g}$"
         axes[0].plot(frequency, spectrum / np.max(spectrum), color=color, label=label)
-        axes[1].plot(position, signal / np.max(np.abs(signal)), color=color, label=label)
+        axes[1].plot(
+            position, signal / np.max(np.abs(signal)), color=color, label=label
+        )
         axes[2].plot(
             position,
             overlap / autocorrelation_at_zero(center, width),
@@ -43,15 +45,24 @@ def main() -> None:
             label=label,
         )
 
-    for index, (axis, title, xlabel) in enumerate(zip(
-        axes,
-        (r"Fourier profile $\widehat f(\xi)$", r"Inverse transform $f(x)$", r"Autocorrelation $\Phi(x)$"),
-        (r"Frequency $\xi$", r"Position $x$", r"Lag $x$"),
-    )):
+    for index, (axis, title, xlabel) in enumerate(
+        zip(
+            axes,
+            (
+                r"Fourier profile $\widehat f(\xi)$",
+                r"Inverse transform $f(x)$",
+                r"Autocorrelation $\Phi(x)$",
+            ),
+            (r"Frequency $\xi$", r"Position $x$", r"Lag $x$"),
+            strict=True,
+        )
+    ):
         axis.set(title=title, xlabel=xlabel, ylabel="Normalized value")
         axis.axhline(0, color="#7b8794", linewidth=0.7)
         axis.grid(alpha=0.2)
-        axis.legend(frameon=False, ncol=3, loc="upper left" if index == 0 else "upper right")
+        axis.legend(
+            frameon=False, ncol=3, loc="upper left" if index == 0 else "upper right"
+        )
 
     fig.suptitle(r"Gaussian test-function family, $\sigma=1$", fontsize=13)
     output = Path(__file__).resolve().parents[1] / "docs" / "figures" / "profiles.png"
