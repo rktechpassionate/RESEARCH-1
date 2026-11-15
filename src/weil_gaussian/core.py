@@ -74,8 +74,12 @@ def fourier_profile(
     """
     center, width = _parameters(center, width)
     frequency = np.asarray(frequency)
-    data = np.asarray(
-        frequency, dtype=np.complex128 if np.iscomplexobj(frequency) else np.float64
+    data = cast(
+        RealArray | ComplexArray,
+        np.asarray(
+            frequency,
+            dtype=np.complex128 if np.iscomplexobj(frequency) else np.float64,
+        ),
     )
     if not np.all(np.isfinite(data)):
         raise ValueError("frequency must contain only finite values")
