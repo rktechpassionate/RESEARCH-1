@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from functools import partial
 from typing import Any
 
@@ -18,7 +18,7 @@ import mpmath as mp
 import numpy as np
 
 from .families import PolynomialGaussianFamily
-from .gram import l2_gram_matrix
+from .gram import finite_weil_diagnostics, l2_gram_matrix
 
 
 @dataclass(frozen=True)
@@ -56,6 +56,8 @@ _FLOAT64_ABS_TOL = 5e-12
 _FLOAT64_REL_TOL = 5e-12
 _REFERENCE_ABS_TOL = "1e-48"
 _REFERENCE_REL_TOL = "1e-48"
+_EXTREMAL_ABS_TOL = 1e-8
+_EXTREMAL_REL_TOL = 1e-8
 _REFERENCE_METHOD = (
     "mpmath tanh-sinh quadrature of inverse, autocorrelation and Gram Fourier "
     "integrals on [0, infinity); direct spectrum and F(0)^2 mass"
@@ -63,6 +65,174 @@ _REFERENCE_METHOD = (
 _FOURIER_CONVENTION = (
     "F(xi)=integral f(x) exp(-i xi x) dx; f(x)=integral F(xi) exp(i xi x) dxi/(2 pi)"
 )
+_EXTREMAL_CENTER = 0.4
+_EXTREMAL_WIDTH = 0.8
+_EXTREMAL_CUTOFFS = (20, 50)
+_EXTREMAL_ZEROS = (0.7 + 0.3j,)
+_EXTREMAL_BASIS_ZEROS = (
+    (0.5j,),
+    (0.5j, 1.0),
+    (0.5j, 1.0, 2.0),
+    (0.5j, 1.0, 2.0, 3.0),
+)
+_SPATIAL_TAIL_RADIUS = 8.0
+
+
+def _extremal_basis(
+    center: float, width: float
+) -> tuple[PolynomialGaussianFamily, ...]:
+    """Fixed polynomial basis sharing one Gaussian envelope."""
+    return tuple(
+        PolynomialGaussianFamily(center, width, tuple(complex(z) for z in zeros))
+        for zeros in _EXTREMAL_BASIS_ZEROS
+    )
+
+
+def _eigenpair_report(pair: Any) -> dict[str, Any]:
+    return {
+        "eigenvalue": float(pair.eigenvalue),
+        "rayleigh_quotient": float(pair.rayleigh_quotient),
+        "basis_coefficients": [float(value) for value in pair.coefficients],
+        "polynomial_coefficients_in_xi_squared": (
+            [float(value) for value in pair.polynomial_coefficients]
+            if pair.polynomial_coefficients is not None
+            else None
+        ),
+        "metric_norm": float(pair.metric_norm),
+        "full_residual_norm": float(pair.full_residual_norm),
+        "projected_residual_norm": float(pair.projected_residual_norm),
+        "relative_projected_residual": float(pair.relative_projected_residual),
+        "zero_residuals": [float(value) for value in pair.zero_residuals],
+        "max_zero_residual": float(pair.max_zero_residual),
+    }
+
+
+def _extremal_solution_report(solution: Any) -> dict[str, Any]:
+    return {
+        "eigenvalues": [float(value) for value in solution.eigenvalues],
+        "constraint_rank": solution.constraint_rank,
+        "subspace_dimension": solution.subspace_dimension,
+        "metric_condition_number": float(solution.metric_condition_number),
+        "metric_relative_tolerance": float(solution.metric_relative_tolerance),
+        "gram_matrix": solution.gram_matrix.tolist(),
+        "finite_weil_matrix": solution.weil_matrix.tolist(),
+        "constraint_matrix": solution.constraint_matrix.tolist(),
+        "integration_error_estimate": solution.integration_error_estimate.tolist(),
+        "prime_tail_bound": None,
+        "minimum": _eigenpair_report(solution.minimum),
+        "maximum": _eigenpair_report(solution.maximum),
+    }
+
+
+def extremal_demo_report(
+    *,
+    center: float = _EXTREMAL_CENTER,
+    width: float = _EXTREMAL_WIDTH,
+    cutoffs: tuple[int, ...] = _EXTREMAL_CUTOFFS,
+    prescribed_zeros: tuple[complex, ...] = _EXTREMAL_ZEROS,
+) -> dict[str, Any]:
+    """Reproduce finite-cutoff Rayleigh extrema on a common-envelope basis.
+
+    This is a float64 numerical diagnostic. In particular it does not bound
+    the omitted prime powers or certify the complete Weil form.
+    """
+    from .extremal import solve_extremal_rayleigh_ritz
+
+    if not cutoffs:
+        raise ValueError("at least one finite prime cutoff is required")
+    basis = _extremal_basis(center, width)
+    rows: list[dict[str, Any]] = []
+    for cutoff in cutoffs:
+        diagnostic = finite_weil_diagnostics(basis, cutoff)
+        unconstrained = solve_extremal_rayleigh_ritz(
+            basis, cutoff, finite_diagnostic=diagnostic
+        )
+        constrained = solve_extremal_rayleigh_ritz(
+            basis,
+            cutoff,
+            zeros=prescribed_zeros,
+            finite_diagnostic=diagnostic,
+        )
+        rows.append(
+            {
+                "cutoff": cutoff,
+                "unconstrained": _extremal_solution_report(unconstrained),
+                "constrained": _extremal_solution_report(constrained),
+            }
+        )
+    return {
+        "basis_center": basis[0].center,
+        "basis_width": basis[0].width,
+        "basis": [
+            {
+                "zero_generators": [str(zero) for zero in family.zeros],
+                "polynomial_coefficients_in_xi_squared": list(family.coefficients),
+            }
+            for family in basis
+        ],
+        "prescribed_zeros": [str(zero) for zero in prescribed_zeros],
+        "cutoffs": rows,
+        "claim": (
+            "float64 Rayleigh extrema for computed finite-cutoff pairing only; "
+            "no omitted-prime-tail bound or RH claim"
+        ),
+        "stationarity": (
+            "constrained stationary residual is projected into the nullspace; "
+            "the full residual need not vanish"
+        ),
+    }
+
+
+def _extremal_regression(report: Mapping[str, Any]) -> dict[str, Any]:
+    """Store float64 finite-matrix outputs separately from mpmath references."""
+    return {
+        "kind": "float64 finite-cutoff regression; not an independent high-precision W reference",
+        "basis_center": report["basis_center"],
+        "basis_width": report["basis_width"],
+        "basis": report["basis"],
+        "prescribed_zeros": report["prescribed_zeros"],
+        "cutoffs": [
+            {
+                "cutoff": row["cutoff"],
+                **{
+                    mode: {
+                        endpoint: {
+                            "rayleigh_quotient": row[mode][endpoint][
+                                "rayleigh_quotient"
+                            ],
+                            "basis_coefficients": row[mode][endpoint][
+                                "basis_coefficients"
+                            ],
+                        }
+                        for endpoint in ("minimum", "maximum")
+                    }
+                    for mode in ("unconstrained", "constrained")
+                },
+            }
+            for row in report["cutoffs"]
+        ],
+    }
+
+
+def _spatial_tail_report() -> dict[str, Any]:
+    """Certificate for the exact model, not numerical or omitted-prime error."""
+    from .certification import certify_spatial_tail
+
+    family = _family(_CASES[0])
+    return {
+        "family_case_id": _CASES[0].label,
+        "radius": _SPATIAL_TAIL_RADIUS,
+        "certificates": [
+            asdict(
+                certify_spatial_tail(family, _SPATIAL_TAIL_RADIUS, quantity=quantity)
+            )
+            for quantity in ("inverse", "autocorrelation")
+        ],
+        "claim": (
+            "rigorous upper bounds for exact-model spatial L1 tails |x|>R; "
+            "not Fourier quadrature rounding or omitted prime-power tails"
+        ),
+    }
 
 
 def _digits(dps: int) -> int:
@@ -92,7 +262,7 @@ def _case_metadata(case: _Case) -> dict[str, Any]:
 
 def _provenance(dps: int) -> dict[str, Any]:
     return {
-        "project_version": "1.0.0",
+        "project_version": "1.1.0",
         "working_digits": dps,
         "output_digits": dps - 10,
         "mpmath_version": mp.__version__,
@@ -108,6 +278,8 @@ def _tolerances() -> dict[str, Any]:
         "float64_relative": _FLOAT64_REL_TOL,
         "reference_absolute": _REFERENCE_ABS_TOL,
         "reference_relative": _REFERENCE_REL_TOL,
+        "finite_extremal_absolute": _EXTREMAL_ABS_TOL,
+        "finite_extremal_relative": _EXTREMAL_REL_TOL,
     }
 
 
@@ -196,14 +368,17 @@ def generate_golden_vectors(dps: int = 70) -> dict[str, Any]:
     """
     _digits(dps)
     with mp.workdps(dps):
+        extremal = extremal_demo_report()
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "provenance": _provenance(dps),
             "tolerances": _tolerances(),
             "cases": [_reference_case(case, dps - 10) for case in _CASES],
             "gram": _reference_gram(
                 tuple(_CASES[index] for index in _GRAM_INDICES), dps - 10
             ),
+            "finite_extremal_regression": _extremal_regression(extremal),
+            "spatial_tail_certificate": _spatial_tail_report(),
         }
 
 
@@ -238,12 +413,79 @@ def _finite_decimal(value: Any, label: str) -> None:
         raise ValueError(f"golden {label} must be finite")
 
 
+def _compare_extremal_regression(
+    committed: Mapping[str, Any], regenerated: Mapping[str, Any]
+) -> tuple[float, list[str]]:
+    """Compare finite float64 diagnostics separately from mpmath references."""
+    problems: list[str] = []
+    maximum_error = 0.0
+    try:
+        for field in (
+            "kind",
+            "basis_center",
+            "basis_width",
+            "basis",
+            "prescribed_zeros",
+        ):
+            if committed[field] != regenerated[field]:
+                problems.append(f"finite extremal {field} differs")
+        old_rows = committed["cutoffs"]
+        new_rows = regenerated["cutoffs"]
+        if len(old_rows) != len(new_rows):
+            problems.append("finite extremal cutoff count differs")
+        for old, new in zip(old_rows, new_rows, strict=False):
+            if old["cutoff"] != new["cutoff"]:
+                problems.append("finite extremal cutoff differs")
+            for mode in ("unconstrained", "constrained"):
+                for endpoint in ("minimum", "maximum"):
+                    old_pair = old[mode][endpoint]
+                    new_pair = new[mode][endpoint]
+                    for field in ("rayleigh_quotient", "basis_coefficients"):
+                        old_values = old_pair[field]
+                        new_values = new_pair[field]
+                        if field == "rayleigh_quotient":
+                            old_values = [old_values]
+                            new_values = [new_values]
+                        if len(old_values) != len(new_values):
+                            problems.append(
+                                f"finite extremal {mode}.{endpoint}.{field} length differs"
+                            )
+                        for index, (old_value, new_value) in enumerate(
+                            zip(old_values, new_values, strict=False)
+                        ):
+                            first = float(old_value)
+                            second = float(new_value)
+                            label = (
+                                f"finite extremal {mode}.{endpoint}.{field}[{index}]"
+                            )
+                            if not math.isfinite(first) or not math.isfinite(second):
+                                problems.append(f"{label} is nonfinite")
+                                continue
+                            error = abs(first - second)
+                            maximum_error = max(maximum_error, error)
+                            threshold = _EXTREMAL_ABS_TOL + _EXTREMAL_REL_TOL * abs(
+                                second
+                            )
+                            if error > threshold:
+                                problems.append(f"{label} differs")
+    except (KeyError, TypeError, ValueError, IndexError, OverflowError) as exc:
+        problems.append(f"malformed finite extremal regression: {exc}")
+    return maximum_error, problems
+
+
+def _compare_spatial_tail_certificate(
+    committed: Mapping[str, Any], regenerated: Mapping[str, Any]
+) -> list[str]:
+    """The exact-rational/Decimal certificate should be bytewise reproducible."""
+    return [] if committed == regenerated else ["spatial tail certificate differs"]
+
+
 def _validate_precomputed_layout(golden: Mapping[str, Any], dps: int) -> None:
     """Reject supplied references whose labels do not identify our fixed cases."""
     if not isinstance(golden, Mapping):
         raise ValueError("golden vectors must be an object")
-    if golden.get("schema_version") != 1:
-        raise ValueError("golden schema_version must be 1")
+    if golden.get("schema_version") != 2:
+        raise ValueError("golden schema_version must be 2")
     provenance = golden.get("provenance")
     if not isinstance(provenance, Mapping):
         raise ValueError("golden provenance is missing")
@@ -297,6 +539,10 @@ def _validate_precomputed_layout(golden: Mapping[str, Any], dps: int) -> None:
     for index, value in enumerate(eigenvalues):
         _finite_decimal(value, f"Gram eigenvalues[{index}]")
     _finite_decimal(gram.get("condition_number"), "Gram condition number")
+    if not isinstance(golden.get("finite_extremal_regression"), Mapping):
+        raise ValueError("golden finite_extremal_regression is missing")
+    if not isinstance(golden.get("spatial_tail_certificate"), Mapping):
+        raise ValueError("golden spatial_tail_certificate is missing")
 
 
 def reproduce_report(
@@ -367,14 +613,36 @@ def reproduce_report(
         "max_eigenvalue_absolute_error": max(error for error, _ in eigen_errors),
         "within_tolerance": gram_passed,
     }
+    extremal = extremal_demo_report()
+    finite_regression = _extremal_regression(extremal)
+    finite_error, finite_problems = _compare_extremal_regression(
+        golden["finite_extremal_regression"], finite_regression
+    )
+    spatial_tail = _spatial_tail_report()
+    spatial_problems = _compare_spatial_tail_certificate(
+        golden["spatial_tail_certificate"], spatial_tail
+    )
     return {
         "schema_version": golden["schema_version"],
         "provenance": {**golden["provenance"], "numpy_version": np.__version__},
         "tolerances": golden["tolerances"],
         "rows": rows,
         "gram": gram,
+        "extremal": extremal,
+        "finite_extremal_regression_check": {
+            "passed": not finite_problems,
+            "max_absolute_error": finite_error,
+            "problems": finite_problems,
+        },
+        "spatial_tail": spatial_tail,
+        "spatial_tail_certificate_check": {
+            "passed": not spatial_problems,
+            "problems": spatial_problems,
+        },
         "all_passed": all(all(row["within_tolerance"].values()) for row in rows)
-        and gram_passed,
+        and gram_passed
+        and not finite_problems
+        and not spatial_problems,
     }
 
 
@@ -396,6 +664,7 @@ def validate_golden_vectors(
         regenerated = generate_golden_vectors(dps)
     problems: list[str] = []
     max_error = 0.0
+    finite_error = 0.0
     if committed.get("schema_version") != regenerated.get("schema_version"):
         problems.append("schema_version differs")
     try:
@@ -474,11 +743,21 @@ def validate_golden_vectors(
                 max_error = max(max_error, error)
                 if not within:
                     problems.append(f"Gram {field}[{index}] differs")
+        old_extremal = committed["finite_extremal_regression"]
+        new_extremal = regenerated["finite_extremal_regression"]
+        finite_error, finite_problems = _compare_extremal_regression(
+            old_extremal, new_extremal
+        )
+        problems.extend(finite_problems)
+        old_tail = committed["spatial_tail_certificate"]
+        new_tail = regenerated["spatial_tail_certificate"]
+        problems.extend(_compare_spatial_tail_certificate(old_tail, new_tail))
     except (KeyError, TypeError, ValueError, IndexError) as exc:
         problems.append(f"malformed vectors: {exc}")
     return {
         "all_passed": not problems,
         "max_absolute_error": max_error,
+        "max_finite_extremal_absolute_error": finite_error,
         "problems": problems,
     }
 
@@ -508,6 +787,51 @@ def render_markdown(report: Mapping[str, Any]) -> str:
             f"Gram minimum eigenvalue: {gram['min_eigenvalue']:.10g}.",
             f"Gram condition number: {gram['condition_number']:.10g}.",
             f"Maximum Gram matrix absolute error: {gram['max_matrix_absolute_error']:.3e}.",
+            "",
+            "## Finite-cutoff Rayleigh–Ritz diagnostics",
+            "",
+            "These optimize represented finite matrices, not the complete Weil form.",
+            "Constrained stationarity uses a projected residual; the full residual need not vanish.",
+            "",
+            "| Cutoff | Mode | Minimum quotient | Maximum quotient | Max projected residual | Max zero residual |",
+            "| ---: | --- | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for row in report["extremal"]["cutoffs"]:
+        for mode, label in (("unconstrained", "free"), ("constrained", "constrained")):
+            result = row[mode]
+            projected = max(
+                result[endpoint]["projected_residual_norm"]
+                for endpoint in ("minimum", "maximum")
+            )
+            zero = max(
+                result[endpoint]["max_zero_residual"]
+                for endpoint in ("minimum", "maximum")
+            )
+            zero_text = f"{zero:.3e}" if mode == "constrained" else "n/a"
+            lines.append(
+                f"| {row['cutoff']} | {label} | "
+                f"{result['minimum']['rayleigh_quotient']:.6f} | "
+                f"{result['maximum']['rayleigh_quotient']:.6f} | "
+                f"{projected:.3e} | {zero_text} |"
+            )
+    lines.extend(
+        [
+            "",
+            "## Analytic spatial L1 tail certificates",
+            "",
+            "These bound exact-model inverse/autocorrelation integrals outside |x| > R;",
+            "they do not bound numerical roundoff, frequency quadrature, or omitted prime powers.",
+        ]
+    )
+    for certificate in report["spatial_tail"]["certificates"]:
+        lines.append(
+            f"- {certificate['quantity']} outside |x| > {certificate['radius']:g}: "
+            f"at most {certificate['bound_decimal']}"
+        )
+    lines.extend(
+        [
+            "",
             f"All checks passed: {str(report['all_passed']).lower()}.",
             "",
         ]

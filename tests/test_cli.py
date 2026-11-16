@@ -39,6 +39,80 @@ def test_module_help_lists_all_commands():
     assert "prime-sum" in result.stdout
     assert "benchmark" in result.stdout
     assert "reproduce" in result.stdout
+    assert "extremal" in result.stdout
+
+
+def test_extremal_json_reports_both_subspaces_and_polynomial(capsys):
+    assert main(["extremal", "--json"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert [row["cutoff"] for row in report["cutoffs"]] == [20, 50]
+    assert report["prescribed_zeros"] == ["(0.7+0.3j)"]
+    assert "no omitted-prime-tail bound" in report["claim"]
+    for row in report["cutoffs"]:
+        for mode in ("unconstrained", "constrained"):
+            solution = row[mode]
+            assert solution["prime_tail_bound"] is None
+            assert (
+                solution["minimum"]["rayleigh_quotient"]
+                <= solution["maximum"]["rayleigh_quotient"]
+            )
+            for endpoint in ("minimum", "maximum"):
+                pair = solution[endpoint]
+                assert len(pair["basis_coefficients"]) == 4
+                assert len(pair["polynomial_coefficients_in_xi_squared"]) == 5
+                assert pair["metric_norm"] == pytest.approx(1, abs=1e-12)
+                assert pair["projected_residual_norm"] < 1e-12
+                if mode == "constrained":
+                    assert pair["max_zero_residual"] < 1e-12
+
+
+def test_extremal_text_distinguishes_projected_and_full_residual(capsys):
+    assert main(["extremal", "--cutoff", "20"]) == 0
+    output = capsys.readouterr().out
+    assert "-8.6986" in output
+    assert "Constrained stationarity uses the projected residual" in output
+    assert "full generalized residual can be nonzero" in output
+    assert "polynomial coefficients" in output
+
+
+def test_extremal_custom_cutoff_and_zero(capsys):
+    assert main(["extremal", "--cutoff", "10", "--zero", "0.4j", "--json"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert [row["cutoff"] for row in report["cutoffs"]] == [10]
+    assert report["prescribed_zeros"] == ["0.4j"]
+    assert report["cutoffs"][0]["constrained"]["minimum"]["max_zero_residual"] < 1e-12
+
+
+@pytest.mark.parametrize("cutoff", ("1", "1001", "nan", "2.5"))
+def test_extremal_rejects_invalid_cutoff(cutoff):
+    result = _module("extremal", "--cutoff", cutoff)
+    assert result.returncode == 2
+    assert "error:" in result.stderr
+
+
+def test_verify_json_includes_distinct_spatial_tail_certificates(capsys):
+    assert main(["verify", "--position", "0.8", "--tail-radius", "8", "--json"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    tails = report["spatial_tail_certificates"]
+    assert [entry["quantity"] for entry in tails] == ["inverse", "autocorrelation"]
+    assert all(entry["certified_analytic_bound"] for entry in tails)
+    assert all(entry["prime_tail_bound"] is None for entry in tails)
+    assert all(float(entry["bound_decimal"]) > 0 for entry in tails)
+    assert all(row["finite_cutoff_tail_bound"] is None for row in report["rows"])
+
+
+def test_verify_text_labels_spatial_tail_scope(capsys):
+    assert main(["verify", "--position", "0.8", "--tail-radius", "8"]) == 0
+    output = capsys.readouterr().out
+    assert "Certified exact-model spatial L1 tail" in output
+    assert "do not enclose numerical Fourier quadrature" in output
+
+
+@pytest.mark.parametrize("radius", ("0", "-2", "nan"))
+def test_verify_rejects_invalid_tail_radius(radius):
+    result = _module("verify", "--tail-radius", radius)
+    assert result.returncode == 2
+    assert "error:" in result.stderr
 
 
 def test_verify_text_output_has_independent_check_and_status(capsys):
@@ -369,11 +443,17 @@ def test_reproduce_subprocess_writes_matching_json_and_markdown_artifacts(tmp_pa
     assert report["provenance"]["random_seed"] is None
     assert len(report["rows"]) == 4
     assert len(report["gram"]["eigenvalues"]) == 3
+    assert [row["cutoff"] for row in report["extremal"]["cutoffs"]] == [20, 50]
+    assert report["finite_extremal_regression_check"]["passed"]
+    assert report["spatial_tail_certificate_check"]["passed"]
+    assert len(report["spatial_tail"]["certificates"]) == 2
     markdown = markdown_path.read_text(encoding="utf-8")
     assert "# Weil Gaussian Lab reproducibility report" in markdown
     for row in report["rows"]:
         assert row["id"] in markdown
     assert "All checks passed: true." in markdown
+    assert "Finite-cutoff Rayleigh–Ritz diagnostics" in markdown
+    assert "Analytic spatial L1 tail certificates" in markdown
     assert "Golden-vector fixture check: passed." in markdown
 
 
@@ -431,6 +511,53 @@ def test_reproduce_check_detects_changed_high_precision_reference(tmp_path, caps
     assert "All checks passed: false." in markdown
     assert "Golden-vector fixture check: failed." in markdown
     assert "base_origin.inverse reference differs" in captured.err
+
+
+@pytest.mark.parametrize(
+    "section", ("finite_extremal_regression", "spatial_tail_certificate")
+)
+def test_reproduce_check_fails_for_tampered_v11_fixture_section(
+    tmp_path, capsys, section: str
+):
+    fixture = json.loads(
+        (ROOT / "tests/data/golden_vectors.json").read_text(encoding="utf-8")
+    )
+    if section == "finite_extremal_regression":
+        fixture[section]["cutoffs"][0]["constrained"]["minimum"][
+            "rayleigh_quotient"
+        ] += 1
+    else:
+        fixture[section]["certificates"][0]["bound_decimal"] = "0"
+    changed = tmp_path / "changed.json"
+    changed.write_text(json.dumps(fixture), encoding="utf-8")
+    artifacts = tmp_path / "artifacts"
+    assert (
+        main(
+            [
+                "reproduce",
+                "--check",
+                "--golden-file",
+                str(changed),
+                "--output-dir",
+                str(artifacts),
+                "--json",
+            ]
+        )
+        == 1
+    )
+    report = json.loads(capsys.readouterr().out)
+    assert not report["all_passed"]
+    assert not report["golden_vector_check"]["passed"]
+    assert any(
+        "finite extremal" in problem or "spatial tail certificate" in problem
+        for problem in report["golden_vector_check"]["problems"]
+    )
+    assert not json.loads(
+        (artifacts / "reproducibility.json").read_text(encoding="utf-8")
+    )["all_passed"]
+    assert "All checks passed: false." in (artifacts / "reproducibility.md").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_reproduce_check_rejects_missing_fixture(tmp_path, capsys):

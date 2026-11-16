@@ -17,12 +17,18 @@ from .balance import (
     balance_diagnostic,
     finite_prime_component,
 )
+from .certification import TailCertificate, certify_spatial_tail
 from .core import (
     autocorrelation,
     autocorrelation_at_zero,
     fourier_profile,
     inverse_profile,
     total_mass,
+)
+from .extremal import (
+    ExtremalEigenpair,
+    ExtremalResult,
+    solve_extremal_rayleigh_ritz,
 )
 from .families import PolynomialGaussianFamily
 from .gram import (
@@ -48,17 +54,21 @@ from .verification import VerificationCheck, VerificationReport, verify_family
 __all__ = [
     "ArchimedeanResult",
     "BalanceDiagnostic",
+    "ExtremalEigenpair",
+    "ExtremalResult",
     "FiniteWeilDiagnostics",
     "GramDiagnostics",
     "GramSensitivityDiagnostics",
     "PrimePowerTerm",
     "PolynomialGaussianFamily",
+    "TailCertificate",
     "VerificationCheck",
     "VerificationReport",
     "autocorrelation",
     "autocorrelation_at_zero",
     "archimedean_component",
     "balance_diagnostic",
+    "certify_spatial_tail",
     "cross_autocorrelation",
     "finite_prime_component",
     "finite_weil_diagnostics",
@@ -73,6 +83,7 @@ __all__ = [
     "prime_power_terms",
     "render_markdown",
     "reproduce_report",
+    "solve_extremal_rayleigh_ritz",
     "total_mass",
     "truncated_prime_term",
     "validate_golden_vectors",

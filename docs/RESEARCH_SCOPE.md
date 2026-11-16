@@ -2,7 +2,7 @@
 
 ## Exact identities and proven properties
 
-Version 1.0.0 implements a real-even polynomial-Gaussian Fourier family whose
+Version 1.1.0 implements a real-even polynomial-Gaussian Fourier family whose
 root factors can enforce multiple prescribed complex frequencies and their
 necessary negative and conjugate partners. The inverse transform and
 autocorrelation follow from Gaussian differentiation. The original
@@ -19,6 +19,21 @@ enclose every floating-point or quadrature error relative to an exact Gram.
 Numerical tests compare selected formulas against independently integrated
 Fourier definitions; the tests are regression evidence, not a proof of all
 mathematical statements.
+
+For a fixed finite family and cutoff, the constrained Rayleigh–Ritz
+principle identifies extremal quotients of the exact matrix pencil when
+the chosen $L^2$ Gram is positive definite. The software computes the
+entries and null-space basis numerically. Its projected generalized
+residual and imposed-zero residual check that computed finite problem;
+the full generalized residual need not vanish under constraints.
+
+The package also derives an analytic upper bound for the two-sided
+*spatial* $L^1$ tails of the inverse Fourier transform $f(x)$ and its
+autocorrelation $\Phi(x)$ beyond $|x|>R>0$. Exact rational coefficient
+envelopes and outward-rounded decimal evaluation provide the bound for
+the mathematical family defined by the supplied finite inputs. This
+does not enclose roundoff in the separate floating implementation or
+provide a frequency-domain quadrature-error bound.
 
 The Fourier transform convention is
 
@@ -41,6 +56,8 @@ $P_N=2\sum_{2\leq n\leq N}\Lambda(n)\Phi(\log n)/\sqrt n$.
 It reports $K-P_N$, adaptive quadrature error estimates, and an explicit
 missing prime-tail bound value of null. The corresponding cross-family
 finite Weil matrix and its eigenvalues are also cutoff-dependent.
+The extremal solver uses this same finite matrix, so its quotient signs
+remain cutoff-dependent.
 Families without the $\pm i/2$ zeros are rejected by these Weil-named
 diagnostics. The coefficient $2$ follows the Fourier convention above.
 
@@ -55,7 +72,8 @@ comparison tolerances. The `reproduce` command regenerates those cases and
 paper artifacts; they do not guarantee machine-epsilon accuracy across all
 parameters or systems.
 
-No certified bound is supplied for prime powers beyond $N$; adaptive
+No certified bound is supplied for prime powers beyond $N$; the new
+spatial-tail bound is unrelated to that arithmetic omission. Adaptive
 quadrature error estimates are not rigorous enclosures. Hence these finite
 outputs do **not** give the complete Weil form, a positivity certificate,
 a prime-sum inequality, an RH test, or a claim about zeta zeros.
@@ -74,5 +92,5 @@ Any result depending on this step requires a fresh derivation and review
 before it can be presented as established.
 
 Future work may derive a certified bound for the omitted prime tail and
-rigorous error control for numerical integration. Any conditional theorem
-would require separate mathematical review.
+rigorous error control for frequency-domain numerical integration. Any
+conditional theorem would require separate mathematical review.

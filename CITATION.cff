@@ -6,10 +6,11 @@ authors:
   - family-names: Kumar
     given-names: Rajeev
     affiliation: Quantovibe Research Group
-version: 1.0.0
+version: 1.1.0
 repository-code: "https://github.com/rktechpassionate/RESEARCH-1"
 license: MIT
 abstract: >-
   Reproducible polynomial-Gaussian Fourier identities, high-precision reference
-  vectors, numerical quadrature cross-checks, L2 Gram diagnostics, and finite
+  vectors, numerical quadrature cross-checks, constrained finite-dimensional
+  Rayleigh-Ritz diagnostics, analytic spatial-tail bounds, and finite
   arithmetic experiments under an explicit Fourier convention.

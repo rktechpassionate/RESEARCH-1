@@ -49,7 +49,7 @@ jobs:
         if: matrix.python-version == '3.12'
         uses: actions/upload-artifact@v4
         with:
-          name: reproducibility-v1
+          name: reproducibility-v1.1
           path: reproducibility/
 
   manuscript:

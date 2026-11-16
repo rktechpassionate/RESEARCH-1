@@ -5,6 +5,20 @@ The original manuscript drafts predate the packaged library. Their broader
 claims are historical material, not claims of the current release; see
 [research scope](docs/RESEARCH_SCOPE.md).
 
+## 1.1.0
+
+- Add constrained Rayleigh–Ritz optimization on finite polynomial-Gaussian
+  bases, using real coefficients for real-even test functions and an optional
+  complex-coefficient algebraic extension. The solver reports generalized
+  eigenpairs, the projected stationarity residual, the full residual, and
+  prescribed-zero constraint residuals separately.
+- Add analytic two-sided spatial-tail bounds for the inverse transform and
+  autocorrelation. Exact rational Gaussian envelopes and outward-rounded
+  decimal evaluation bound the truncation beyond a positive radius.
+- Extend the CLI, reproducibility report, golden-vector regressions, tests,
+  and manuscript with the new finite-dimensional and tail calculations.
+  Neither addition bounds the omitted infinite prime-power tail.
+
 ## 1.0.0
 
 - Add a deterministic `reproduce` command and committed high-precision golden

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "weil-gaussian-lab"
-version = "1.0.0"
-description = "Reproducible polynomial-Gaussian Fourier and finite Weil diagnostics"
+version = "1.1.0"
+description = "Polynomial-Gaussian Fourier and finite Weil diagnostics with analytic tail bounds"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{name = "Rajeev Kumar (Quantovibe Research Group)"}]
@@ -15,6 +15,7 @@ classifiers = [
   "Intended Audience :: Science/Research",
   "Programming Language :: Python :: 3",
   "Topic :: Scientific/Engineering :: Mathematics",
+  "Typing :: Typed",
 ]
 
 [project.optional-dependencies]

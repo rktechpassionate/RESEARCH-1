@@ -1,11 +1,11 @@
 # Weil Gaussian Lab
 
 [![CI](https://github.com/rktechpassionate/RESEARCH-1/actions/workflows/ci.yml/badge.svg)](https://github.com/rktechpassionate/RESEARCH-1/actions/workflows/ci.yml)
-![Version 1.0.0](https://img.shields.io/badge/version-1.0.0-blue)
+![Version 1.1.0](https://img.shields.io/badge/version-1.1.0-blue)
 ![Python 3.10–3.12](https://img.shields.io/badge/Python-3.10%E2%80%933.12-blue)
 [![MIT license](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-Weil Gaussian Lab 1.0.0 is an MIT-licensed, typed Python library for
+Weil Gaussian Lab 1.1.0 is an MIT-licensed, typed Python library for
 reproducible experiments with polynomial-Gaussian test functions. It combines
 analytic Fourier and autocorrelation formulas, multiple prescribed complex
 zeros, $L^2$ Gram diagnostics, finite prime-power calculations, two numerical
@@ -13,6 +13,12 @@ quadrature cross-checks, and committed high-precision reference vectors. The
 [technical note (PDF)](paper/gaussian_identities.pdf) gives definitions,
 derivations, and a numerical table matching the CLI report; its
 [LaTeX source](paper/gaussian_identities.tex) is included.
+
+Version 1.1 adds constrained Rayleigh–Ritz optimization on a finite
+polynomial-Gaussian basis and analytic bounds for spatial Gaussian tails.
+The former operates on computed finite-cutoff matrices; the latter bounds
+$\int_{|x|>R}|f(x)|\,dx$ or the analogous autocorrelation tail. They address
+different questions and do not bound omitted prime powers.
 
 **Scope:** the \(L^2\) Gram matrix is positive semidefinite by construction.
 Finite Weil-form and prime-balance calculations are numerical diagnostics,
@@ -64,8 +70,9 @@ Python 3.10 or newer is required.
 
 ~~~bash
 python -m pip install -e '.[dev]'
-weil-gaussian verify --center 1.2 --width 0.9 --position 0.8 --dps 40
+weil-gaussian verify --center 1.2 --width 0.9 --position 0.8 --dps 40 --tail-radius 8
 python -m weil_gaussian prime-sum --center 1.2 --width 0.9 --limit 100
+weil-gaussian extremal --cutoff 20 --cutoff 50 --zero 0.7+0.3j --json
 weil-gaussian reproduce --check --output-dir artifacts
 weil-gaussian benchmark --points 100 --repeats 2
 ~~~
@@ -107,7 +114,10 @@ slightly across numerical platforms. The float64 comparison criterion is
 high-precision `mpmath` integration and two float64 quadrature routes:
 adaptive Gauss–Kronrod and Gauss–Hermite. Its errors, adaptive estimates,
 order-doubling differences, and pass thresholds are numerical checks, not
-rigorous error certificates. Repeat `--zero` for a custom multi-zero
+rigorous error certificates. `--tail-radius R` adds a separate certified
+*spatial* $L^1$ tail bound beyond $|x|>R$ for the exact represented
+family; it does not bound the Fourier quadrature error. Repeat `--zero`
+for a custom multi-zero
 family, for example `--zero 0.5j --zero 1+0.5j`.
 
 The finite prime-power demonstration reports an archimedean component and
@@ -125,9 +135,50 @@ Quadrature error estimate = 1.68e-12; converged=True
 No prime-tail bound; not the full Weil form or an RH test.
 ~~~
 
+## Finite-basis extrema and spatial-tail certificates
+
+For a selected basis $f_1,\ldots,f_r$, the `extremal` command examines
+$c^{\mathsf T}W^{(N)}c/(c^{\mathsf T}Gc)$. Here $G$ is the $L^2$ Gram
+pairing and $W^{(N)}$ uses an archimedean integral and prime powers only
+through cutoff $N$. A requested complex zero imposes two real linear
+conditions on the coefficient vector. The solver projects onto their
+numerical null space and solves the reduced generalized eigenproblem. It
+reports coefficients, quotients, zero residuals, and both full and
+projected generalized residuals. **Only the projected generalized
+residual is required to vanish at a constrained optimum.** A small
+residual checks the computed finite problem, not the infinite Weil form.
+The Python API also offers a complex-coefficient algebraic Hermitian
+extension; its combinations need not remain real and even. The CLI's
+default real-coefficient example uses $a=0.4$, $\sigma=0.8$ and imposes
+the additional zero $0.7+0.3i$:
+
+| Prime cutoff | Unconstrained min/max | Constrained min/max |
+| ---: | ---: | ---: |
+| 20 | -8.698603 / 4.467349 | -1.842221 / 2.008093 |
+| 50 | -8.884650 / 6.458544 | -3.414900 / 2.169805 |
+
+These are rounded values for the computed finite matrices. The CLI returns
+the coefficient vectors and residuals for each cutoff; the fixed example's
+projected stationarity and imposed-zero residuals are below $10^{-13}$ in
+the documented run, with no universal accuracy promise for all inputs.
+
+`certify_spatial_tail` bounds the absolute integral beyond $|x|>R>0$ for
+the inverse transform or autocorrelation of a polynomial-Gaussian family.
+It constructs an exact rational polynomial envelope from the supplied
+finite float inputs, then evaluates a Gaussian-moment upper bound with
+outward-rounded decimal arithmetic. Coefficientwise absolute values can
+make the bound conservative, especially for high-degree families. The
+bound applies to the mathematical
+family represented by those inputs. It does not certify separate
+double-precision evaluation error, frequency-domain quadrature, or the
+missing infinite prime-power tail.
+For the base family at $a=1.2$, $\sigma=0.9$, the reported upper bounds at
+$R=8$ are $7.485\times10^{-11}$ for $f$ and
+$4.971\times10^{-4}$ for $\Phi$, rounded upward.
+
 The benchmark reports median and range of wall-clock timings plus Python and
 NumPy versions; timings vary by machine and are not cross-machine performance
-claims. All four commands support help and JSON output for reproducible
+claims. All five commands support help and JSON output for reproducible
 scripts.
 
 The Python API also accepts NumPy-compatible arrays:
@@ -153,6 +204,8 @@ overlap = family.autocorrelation(position)
 | [Core formulas](src/weil_gaussian/core.py) | Original two-parameter spectrum, inverse, autocorrelation, and exact mass | Analytic identities |
 | [Multi-zero families](src/weil_gaussian/families.py) | Real-even polynomial construction and analytic transforms | Zeros of the chosen test function |
 | [Gram diagnostics](src/weil_gaussian/gram.py) | Pairings, eigenvalues, and conditioning across parameter grids | \(L^2\) positivity is unconditional; finite Weil results are exploratory |
+| [Extremal solver](src/weil_gaussian/extremal.py) | Projected finite-basis generalized eigenproblem with prescribed zeros | Computed finite-cutoff extrema and residuals |
+| [Tail certification](src/weil_gaussian/certification.py) | Rational Gaussian envelopes and outward-rounded spatial-tail bounds | Analytic $L^1$ truncation control for $f$ or $\Phi$ |
 | [Arithmetic](src/weil_gaussian/arithmetic.py) | Enumerated prime-power terms through a cutoff | Finite sum, no tail estimate |
 | [Balance diagnostics](src/weil_gaussian/balance.py) | Archimedean integral versus finite prime-power term | Numerical balance, not the full Weil value |
 | [Verification](src/weil_gaussian/verification.py) | Two independent quadrature schemes and explicit residuals | Numerical evidence, not an integral error certificate |

@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 import re
+from decimal import Decimal
 from pathlib import Path
 
 from weil_gaussian.repro import reproduce_report
 
 _SCIENTIFIC_TEX = re.compile(r"\$([0-9.]+)\\times10\^\{(-?\d+)\}\$")
 _CASE_LABEL = re.compile(r"\\texttt\{([a-z\\_]+)\}")
+
+
+def _table_with_label(source: str, label: str) -> str:
+    for table in re.findall(r"\\begin\{table\}.*?\\end\{table\}", source, re.DOTALL):
+        if rf"\label{{{label}}}" in table:
+            return table
+    raise AssertionError(f"paper table {label} is missing")
 
 
 def _scientific_value(text: str) -> float:
@@ -22,12 +30,10 @@ def test_paper_numerical_table_matches_reproducibility_report() -> None:
         Path(__file__).resolve().parents[1] / "paper" / "gaussian_identities.tex"
     ).read_text(encoding="utf-8")
     report = reproduce_report()
-    table = re.search(r"\\begin\{table\}.*?\\end\{table\}", source, re.DOTALL)
-    assert table is not None
-    assert r"\label{tab:golden}" in table.group()
+    table = _table_with_label(source, "tab:golden")
     paper_rows = [
         line
-        for line in table.group().splitlines()
+        for line in table.splitlines()
         if line.startswith(r"\texttt{") and "&" in line
     ]
     assert len(paper_rows) == len(report["rows"])
@@ -66,3 +72,50 @@ def test_paper_numerical_table_matches_reproducibility_report() -> None:
     paper_matrix_error = _scientific_value(matrix_error.group(1))
     observed_matrix_error = report["gram"]["max_matrix_absolute_error"]
     assert 0.1 < paper_matrix_error / observed_matrix_error < 10
+
+
+def test_paper_extremal_table_matches_reproducible_finite_diagnostics() -> None:
+    source = (
+        Path(__file__).resolve().parents[1] / "paper" / "gaussian_identities.tex"
+    ).read_text(encoding="utf-8")
+    table = _table_with_label(source, "tab:extremal")
+    report = reproduce_report()
+    paper_rows = [line for line in table.splitlines() if re.match(r"^(20|50) &", line)]
+    expected = [
+        (row, mode, label)
+        for row in report["extremal"]["cutoffs"]
+        for mode, label in (
+            ("unconstrained", "Unconstrained"),
+            ("constrained", r"$F_c(0.7+0.3i)=0$"),
+        )
+    ]
+    assert len(paper_rows) == len(expected)
+    for line, (row, mode, label) in zip(paper_rows, expected, strict=True):
+        cells = [cell.strip().rstrip("\\") for cell in line.split("&")]
+        assert cells == [
+            str(row["cutoff"]),
+            label,
+            f"{row[mode]['minimum']['rayleigh_quotient']:.6f}",
+            f"{row[mode]['maximum']['rayleigh_quotient']:.6f}",
+        ]
+
+
+def test_paper_spatial_tail_figures_are_rounded_up_from_certificates() -> None:
+    source = (
+        Path(__file__).resolve().parents[1] / "paper" / "gaussian_identities.tex"
+    ).read_text(encoding="utf-8")
+    report = reproduce_report()
+    figures = re.search(
+        r"certificate gives .*?\\le (\d+\.\d+)\\times10\^\{(-?\d+)\}.*?"
+        r"\\le (\d+\.\d+)\\times10\^\{(-?\d+)\}",
+        source,
+        re.DOTALL,
+    )
+    assert figures is not None
+    for index, certificate in enumerate(report["spatial_tail"]["certificates"]):
+        mantissa = figures.group(1 + 2 * index)
+        exponent = figures.group(2 + 2 * index)
+        displayed = Decimal(mantissa) * (Decimal(10) ** int(exponent))
+        certified = Decimal(certificate["bound_decimal"])
+        assert displayed >= certified > 0
+        assert displayed < certified * Decimal("1.001")

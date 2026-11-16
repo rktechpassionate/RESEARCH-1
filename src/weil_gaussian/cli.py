@@ -17,6 +17,7 @@ import sys
 import tempfile
 import time
 from collections.abc import Sequence
+from dataclasses import asdict
 from importlib import resources
 from pathlib import Path
 from typing import Any, TypedDict
@@ -26,6 +27,7 @@ import numpy as np
 
 from .arithmetic import prime_power_terms
 from .balance import balance_diagnostic
+from .certification import certify_spatial_tail
 from .families import PolynomialGaussianFamily
 from .verification import verify_family
 
@@ -170,6 +172,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="maximum acceptable absolute error",
     )
     verify.add_argument("--json", action="store_true", help="emit structured JSON")
+    verify.add_argument(
+        "--tail-radius",
+        type=_positive_float,
+        metavar="R",
+        help="certify exact-model spatial L1 tails outside |x| > R",
+    )
 
     prime = commands.add_parser(
         "prime-sum", help="show a finite prime-power sum, without a tail bound"
@@ -183,6 +191,30 @@ def build_parser() -> argparse.ArgumentParser:
         "--show-terms", type=_shown, default=5, help="number of initial terms to show"
     )
     prime.add_argument("--json", action="store_true", help="emit structured JSON")
+
+    extremal = commands.add_parser(
+        "extremal",
+        help="optimize a finite-cutoff Weil Rayleigh quotient on a Gaussian basis",
+    )
+    extremal.add_argument("--center", type=_nonnegative_float, default=0.4)
+    extremal.add_argument("--width", type=_positive_float, default=0.8)
+    extremal.add_argument(
+        "--cutoff",
+        type=lambda value: _bounded_integer(value, low=2, high=1000),
+        action="append",
+        dest="cutoffs",
+        metavar="N",
+        help="finite prime-power cutoff; repeat (default: 20 and 50)",
+    )
+    extremal.add_argument(
+        "--zero",
+        type=_complex_zero,
+        action="append",
+        dest="prescribed_zeros",
+        metavar="Z",
+        help="complex frequency where the optimal combination must vanish; repeat",
+    )
+    extremal.add_argument("--json", action="store_true", help="emit structured JSON")
 
     benchmark = commands.add_parser(
         "benchmark", help="time deterministic vectorized profile evaluations"
@@ -326,6 +358,14 @@ def _verify(args: argparse.Namespace) -> int:
                     }
                 )
     all_passed = all(bool(row["passed"]) for row in rows)
+    spatial_tails = (
+        [
+            asdict(certify_spatial_tail(family, args.tail_radius, quantity=quantity))
+            for quantity in ("inverse", "autocorrelation")
+        ]
+        if args.tail_radius is not None
+        else []
+    )
     if args.json:
         print(
             json.dumps(
@@ -345,6 +385,7 @@ def _verify(args: argparse.Namespace) -> int:
                         "Gauss-Hermite on the Gaussian decomposition",
                     ],
                     "rows": rows,
+                    "spatial_tail_certificates": spatial_tails,
                     "passed": all_passed,
                     "error_certification": (
                         "observed discrepancies and integration estimates; "
@@ -397,6 +438,17 @@ def _verify(args: argparse.Namespace) -> int:
         print(
             "Errors and refinement estimates are numerical indicators, not rigorous bounds."
         )
+        for certificate in spatial_tails:
+            print(
+                f"Certified exact-model spatial L1 tail |x| > {certificate['radius']:g} "
+                f"for {certificate['quantity']}: "
+                f"<= {certificate['bound_decimal']}"
+            )
+        if spatial_tails:
+            print(
+                "These spatial bounds do not enclose numerical Fourier quadrature "
+                "roundoff or the omitted prime-power tail."
+            )
         print(
             f"{'PASS' if all_passed else 'FAIL'}: "
             f"{len(rows)} comparisons at {args.dps} digits; "
@@ -469,6 +521,68 @@ def _prime_sum(args: argparse.Namespace) -> int:
                 )
         print("No prime-tail bound; not the full Weil form or an RH test.")
     return 0 if diagnostic.archimedean.converged else 1
+
+
+def _extremal(args: argparse.Namespace) -> int:
+    """Report unconstrained and constrained finite-cutoff Rayleigh extrema."""
+    from .repro import extremal_demo_report
+
+    report = extremal_demo_report(
+        center=args.center,
+        width=args.width,
+        cutoffs=tuple(args.cutoffs or (20, 50)),
+        prescribed_zeros=tuple(args.prescribed_zeros or (0.7 + 0.3j,)),
+    )
+    if args.json:
+        print(json.dumps(report, allow_nan=False, indent=2, sort_keys=True))
+    else:
+        print(
+            "Finite-cutoff Rayleigh-Ritz on polynomial-Gaussian basis: "
+            f"center={args.center:g}, width={args.width:g}"
+        )
+        print("Prescribed zero frequencies: " + ", ".join(report["prescribed_zeros"]))
+        print(
+            "cutoff  mode            minimum       maximum     "
+            "max projected residual  max zero residual"
+        )
+        for row in report["cutoffs"]:
+            for mode in ("unconstrained", "constrained"):
+                result = row[mode]
+                largest_projected = max(
+                    result["minimum"]["projected_residual_norm"],
+                    result["maximum"]["projected_residual_norm"],
+                )
+                largest_zero = max(
+                    result["minimum"]["max_zero_residual"],
+                    result["maximum"]["max_zero_residual"],
+                )
+                zero_text = f"{largest_zero:.3e}" if mode == "constrained" else "n/a"
+                print(
+                    f"{row['cutoff']:>6}  {mode:<13} "
+                    f"{result['minimum']['rayleigh_quotient']:>13.6g} "
+                    f"{result['maximum']['rayleigh_quotient']:>13.6g} "
+                    f"{largest_projected:>22.3e} {zero_text:>18}"
+                )
+                for endpoint in ("minimum", "maximum"):
+                    vector = result[endpoint]
+                    print(
+                        f"  {mode} {endpoint} basis weights: "
+                        f"{vector['basis_coefficients']}"
+                    )
+                    if vector["polynomial_coefficients_in_xi_squared"] is not None:
+                        print(
+                            f"  {mode} {endpoint} polynomial coefficients "
+                            "(ascending powers of xi^2): "
+                            f"{vector['polynomial_coefficients_in_xi_squared']}"
+                        )
+        print(
+            "Constrained stationarity uses the projected residual; the full "
+            "generalized residual can be nonzero."
+        )
+        print(
+            "Finite prime-power cutoff only: no omitted-prime-tail bound or RH claim."
+        )
+    return 0
 
 
 def _benchmark(args: argparse.Namespace) -> int:
@@ -654,6 +768,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _verify(args)
         if args.command == "prime-sum":
             return _prime_sum(args)
+        if args.command == "extremal":
+            return _extremal(args)
         if args.command == "benchmark":
             return _benchmark(args)
         if args.command == "reproduce":

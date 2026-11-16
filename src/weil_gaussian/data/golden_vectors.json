@@ -85,6 +85,152 @@
       ]
     }
   ],
+  "finite_extremal_regression": {
+    "basis": [
+      {
+        "polynomial_coefficients_in_xi_squared": [
+          0.25,
+          1.0
+        ],
+        "zero_generators": [
+          "0.5j"
+        ]
+      },
+      {
+        "polynomial_coefficients_in_xi_squared": [
+          -0.25,
+          -0.75,
+          1.0
+        ],
+        "zero_generators": [
+          "0.5j",
+          "(1+0j)"
+        ]
+      },
+      {
+        "polynomial_coefficients_in_xi_squared": [
+          1.0,
+          2.75,
+          -4.75,
+          1.0
+        ],
+        "zero_generators": [
+          "0.5j",
+          "(1+0j)",
+          "(2+0j)"
+        ]
+      },
+      {
+        "polynomial_coefficients_in_xi_squared": [
+          -9.0,
+          -23.75,
+          45.5,
+          -13.75,
+          1.0
+        ],
+        "zero_generators": [
+          "0.5j",
+          "(1+0j)",
+          "(2+0j)",
+          "(3+0j)"
+        ]
+      }
+    ],
+    "basis_center": 0.4,
+    "basis_width": 0.8,
+    "cutoffs": [
+      {
+        "constrained": {
+          "maximum": {
+            "basis_coefficients": [
+              0.2591956395954401,
+              0.8098115903785921,
+              -0.6495285393965845,
+              -0.09284769564671706
+            ],
+            "rayleigh_quotient": 2.008092539265223
+          },
+          "minimum": {
+            "basis_coefficients": [
+              -0.026930347022117912,
+              0.5107533490365437,
+              0.6199727053528926,
+              0.054932657634596344
+            ],
+            "rayleigh_quotient": -1.842221071437846
+          }
+        },
+        "cutoff": 20,
+        "unconstrained": {
+          "maximum": {
+            "basis_coefficients": [
+              1.2014346332067825,
+              -0.1529607350860538,
+              0.05437037120551481,
+              0.058158005409352634
+            ],
+            "rayleigh_quotient": 4.467349362775185
+          },
+          "minimum": {
+            "basis_coefficients": [
+              0.6400472193981607,
+              -0.03363937494754894,
+              -0.1529707162367338,
+              -0.09461175533298957
+            ],
+            "rayleigh_quotient": -8.698603302914366
+          }
+        }
+      },
+      {
+        "constrained": {
+          "maximum": {
+            "basis_coefficients": [
+              -0.1270062997021029,
+              0.14982761589282245,
+              0.82594091832861,
+              0.08710789114643602
+            ],
+            "rayleigh_quotient": 2.1698047434602787
+          },
+          "minimum": {
+            "basis_coefficients": [
+              0.2275456503913019,
+              0.9456296743331517,
+              -0.3522429251294302,
+              -0.06364359167839154
+            ],
+            "rayleigh_quotient": -3.4149004719418476
+          }
+        },
+        "cutoff": 50,
+        "unconstrained": {
+          "maximum": {
+            "basis_coefficients": [
+              1.5010810921113806,
+              -0.6712703369426297,
+              0.3181228347108558,
+              0.09280191078328584
+            ],
+            "rayleigh_quotient": 6.458544143970354
+          },
+          "minimum": {
+            "basis_coefficients": [
+              0.36459160935593826,
+              0.13231588516089512,
+              -0.2741131035387796,
+              -0.1213257105325308
+            ],
+            "rayleigh_quotient": -8.884650015214065
+          }
+        }
+      }
+    ],
+    "kind": "float64 finite-cutoff regression; not an independent high-precision W reference",
+    "prescribed_zeros": [
+      "(0.7+0.3j)"
+    ]
+  },
   "gram": {
     "case_ids": [
       "base_origin",
@@ -117,15 +263,50 @@
   },
   "provenance": {
     "fourier_convention": "F(xi)=integral f(x) exp(-i xi x) dx; f(x)=integral F(xi) exp(i xi x) dxi/(2 pi)",
-    "mpmath_version": "1.3.0",
+    "mpmath_version": "1.4.1",
     "output_digits": 60,
-    "project_version": "1.0.0",
+    "project_version": "1.1.0",
     "random_seed": null,
     "reference_method": "mpmath tanh-sinh quadrature of inverse, autocorrelation and Gram Fourier integrals on [0, infinity); direct spectrum and F(0)^2 mass",
     "working_digits": 70
   },
-  "schema_version": 1,
+  "schema_version": 2,
+  "spatial_tail_certificate": {
+    "certificates": [
+      {
+        "bound_decimal": "7.4843179094928649135339481539350444986414962896937953290359282954912912408774897E-11",
+        "certified_analytic_bound": true,
+        "envelope_degree": 2,
+        "gaussian_rate_ratio": "65715007115831415416180825873449/162259276829213363391578010288128",
+        "method": "exact-rational derivative envelope, Gaussian Mills recurrence, outward-rounded Decimal",
+        "prime_tail_bound": null,
+        "quantity": "inverse",
+        "radius": 8.0,
+        "radius_ratio": "8/1",
+        "rational_prefactor_ratio": "1251661269049162070628154879490771748575415610703262558028817949/92559631349317842154813324848386775598536443561081085525753856",
+        "working_digits": 80
+      },
+      {
+        "bound_decimal": "0.00049703760793813480767218996658543881025949525076391944555544458302114631876146860",
+        "certified_analytic_bound": true,
+        "envelope_degree": 4,
+        "gaussian_rate_ratio": "65715007115831415416180825873449/324518553658426726783156020576256",
+        "method": "exact-rational derivative envelope, Gaussian Mills recurrence, outward-rounded Decimal",
+        "prime_tail_bound": null,
+        "quantity": "autocorrelation",
+        "radius": 8.0,
+        "radius_ratio": "8/1",
+        "rational_prefactor_ratio": "160892739330989506361380818377171071911760311825432726246612786313082871582853445381698987899281578667049938047514120818899233379/761536476046366404780947097044418060998166969089548183621375803422674437162558442648290171343419555854017063330976533021982720",
+        "working_digits": 80
+      }
+    ],
+    "claim": "rigorous upper bounds for exact-model spatial L1 tails |x|>R; not Fourier quadrature rounding or omitted prime-power tails",
+    "family_case_id": "base_origin",
+    "radius": 8.0
+  },
   "tolerances": {
+    "finite_extremal_absolute": 1e-08,
+    "finite_extremal_relative": 1e-08,
     "float64_absolute": 5e-12,
     "float64_relative": 5e-12,
     "reference_absolute": "1e-48",

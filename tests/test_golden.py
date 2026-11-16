@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 from copy import deepcopy
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -335,3 +336,93 @@ def test_different_mpmath_version_metadata_is_allowed(
     altered = deepcopy(committed)
     altered["provenance"]["mpmath_version"] = "some-other-version"
     assert validate_golden_vectors(altered, regenerated)["all_passed"]
+
+
+def test_v11_fixture_separates_reference_and_finite_regression(
+    committed: dict[str, Any], report: dict[str, Any]
+) -> None:
+    assert committed["schema_version"] == 2
+    assert committed["provenance"]["project_version"] == "1.1.0"
+    finite = committed["finite_extremal_regression"]
+    assert "not an independent high-precision W reference" in finite["kind"]
+    assert [row["cutoff"] for row in finite["cutoffs"]] == [20, 50]
+    assert report["finite_extremal_regression_check"]["passed"]
+    assert report["spatial_tail_certificate_check"]["passed"]
+
+
+@pytest.mark.parametrize("cutoff_index", (0, 1))
+@pytest.mark.parametrize("mode", ("unconstrained", "constrained"))
+@pytest.mark.parametrize("endpoint", ("minimum", "maximum"))
+def test_finite_regression_matches_reproduced_quotients(
+    committed: dict[str, Any],
+    report: dict[str, Any],
+    cutoff_index: int,
+    mode: str,
+    endpoint: str,
+) -> None:
+    stored = committed["finite_extremal_regression"]["cutoffs"][cutoff_index][mode][
+        endpoint
+    ]
+    current = report["extremal"]["cutoffs"][cutoff_index][mode][endpoint]
+    assert current["rayleigh_quotient"] == pytest.approx(
+        stored["rayleigh_quotient"], abs=1e-8, rel=1e-8
+    )
+    assert current["basis_coefficients"] == pytest.approx(
+        stored["basis_coefficients"], abs=1e-8, rel=1e-8
+    )
+    assert current["projected_residual_norm"] < 1e-12
+    if mode == "constrained":
+        assert current["max_zero_residual"] < 1e-12
+
+
+@pytest.mark.parametrize("quantity", ("inverse", "autocorrelation"))
+def test_fixture_spatial_certificate_is_positive_and_exactly_reproduced(
+    committed: dict[str, Any], report: dict[str, Any], quantity: str
+) -> None:
+    stored = committed["spatial_tail_certificate"]["certificates"]
+    current = report["spatial_tail"]["certificates"]
+    index = ("inverse", "autocorrelation").index(quantity)
+    assert stored[index] == current[index]
+    assert stored[index]["quantity"] == quantity
+    assert Decimal(stored[index]["bound_decimal"]) > 0
+    assert stored[index]["prime_tail_bound"] is None
+
+
+def test_tampered_finite_extremal_quotient_fails_regeneration_check(
+    committed: dict[str, Any], regenerated: dict[str, Any]
+) -> None:
+    altered = deepcopy(committed)
+    altered["finite_extremal_regression"]["cutoffs"][0]["constrained"]["minimum"][
+        "rayleigh_quotient"
+    ] += 1
+    result = validate_golden_vectors(altered, regenerated)
+    assert not result["all_passed"]
+    assert any("finite extremal" in problem for problem in result["problems"])
+
+
+def test_tampered_spatial_certificate_fails_regeneration_check(
+    committed: dict[str, Any], regenerated: dict[str, Any]
+) -> None:
+    altered = deepcopy(committed)
+    altered["spatial_tail_certificate"]["certificates"][0]["bound_decimal"] = "0"
+    result = validate_golden_vectors(altered, regenerated)
+    assert not result["all_passed"]
+    assert "spatial tail certificate differs" in result["problems"]
+
+
+def test_tampered_finite_extremal_metadata_fails_report(
+    regenerated: dict[str, Any],
+) -> None:
+    altered = deepcopy(regenerated)
+    altered["finite_extremal_regression"]["prescribed_zeros"] = ["0j"]
+    report = reproduce_report(golden=altered)
+    assert not report["all_passed"]
+    assert not report["finite_extremal_regression_check"]["passed"]
+
+
+def test_tampered_spatial_certificate_fails_report(regenerated: dict[str, Any]) -> None:
+    altered = deepcopy(regenerated)
+    altered["spatial_tail_certificate"]["certificates"][1]["bound_decimal"] = "0"
+    report = reproduce_report(golden=altered)
+    assert not report["all_passed"]
+    assert not report["spatial_tail_certificate_check"]["passed"]
