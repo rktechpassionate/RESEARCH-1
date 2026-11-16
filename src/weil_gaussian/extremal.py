@@ -127,8 +127,17 @@ def _constraint_subspace(
 ) -> tuple[CoefficientArray, CoefficientArray, int]:
     size = len(families)
     if not zeros:
-        dtype = np.float64 if coefficient_field == "real" else np.complex128
-        return np.zeros((0, size), dtype=dtype), np.eye(size, dtype=dtype), 0
+        if coefficient_field == "real":
+            return (
+                np.zeros((0, size), dtype=np.float64),
+                np.eye(size, dtype=np.float64),
+                0,
+            )
+        return (
+            np.zeros((0, size), dtype=np.complex128),
+            np.eye(size, dtype=np.complex128),
+            0,
+        )
     values_matrix = np.empty((len(zeros), size), dtype=np.complex128)
     for row, zero in enumerate(zeros):
         values = np.asarray(
@@ -158,11 +167,19 @@ def _constraint_subspace(
             scaled_rows.append(equation / scale)
     if not scaled_rows:
         return matrix, cast(CoefficientArray, np.eye(size, dtype=matrix.dtype)), 0
-    scaled = np.stack(scaled_rows)
-    _, singular_values, right_vectors = np.linalg.svd(scaled, full_matrices=True)
-    threshold = max(tolerance, np.finfo(float).eps * max(scaled.shape)) * float(
-        singular_values[0]
-    )
+    if coefficient_field == "real":
+        scaled_real = np.asarray(np.stack(scaled_rows), dtype=np.float64)
+        _, singular_values, right_vectors = np.linalg.svd(
+            scaled_real, full_matrices=True
+        )
+    else:
+        scaled_complex = np.asarray(np.stack(scaled_rows), dtype=np.complex128)
+        _, singular_values, right_vectors = np.linalg.svd(
+            scaled_complex, full_matrices=True
+        )
+    threshold = max(
+        tolerance, np.finfo(float).eps * max(len(scaled_rows), size)
+    ) * float(singular_values[0])
     rank = int(np.count_nonzero(singular_values > threshold))
     if rank == size:
         raise ValueError("zero constraints leave no nonzero coefficient vector")
